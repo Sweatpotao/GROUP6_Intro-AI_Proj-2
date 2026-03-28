@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated inputs (giữ lại input_01.json làm mẫu)
+Inputs/*.json
+!Inputs/input_01.json
+
+# Generated outputs (giữ lại output_01.json và log.json làm mẫu)
+Outputs/*.json
+!Outputs/output_01.json
+!Outputs/log.json
