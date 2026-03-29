@@ -63,18 +63,9 @@ def rebuild_log():
             stripped = {k: v for k, v in algo_result.items() if k != "steps"}
             stripped_algos[algo_name] = stripped
 
-        # Lấy status tổng quát của puzzle
-        overall_status = 0
-        for algo_result in stripped_algos.values():
-            s = algo_result.get("status")
-            if s == 1:
-                overall_status = 1
-                break
-
         results.append({
             "input_id":   data["input_id"],
             "size":       data["size"],
-            "status":     overall_status,
             "algorithms": stripped_algos,
         })
 
