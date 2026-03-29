@@ -1,10 +1,19 @@
 import json
 import os
+import re
 from datetime import datetime
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "Outputs")
 LOG_FILE   = os.path.join(OUTPUT_DIR, "log.json")
 
+# Format cho file json
+def _compact_json(data) -> str:
+    raw = json.dumps(data, ensure_ascii=False, indent=2)
+    def compress(match):
+        items = re.findall(r'-?[0-9]+', match.group(0))
+        return '[' + ', '.join(items) + ']'
+    raw = re.sub(r'\[[^\[\]]*?\]', compress, raw, flags=re.DOTALL)
+    return raw
 
 def save_output(input_id: str, size: int, solution, algorithms: dict):
     # Ghi output_XX.json
@@ -12,7 +21,7 @@ def save_output(input_id: str, size: int, solution, algorithms: dict):
     #     input_id   : "input_01"
     #     size       : N
     #     solution   : list[list[int]] hoặc None nếu không giải được
-    #     algorithms : dict tên → result dict (có steps[])
+    #     algorithms : dict tên -> result dict (có steps[])
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -27,13 +36,13 @@ def save_output(input_id: str, size: int, solution, algorithms: dict):
     }
 
     with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write(_compact_json(data))
 
     return filepath
 
 
 def rebuild_log():
-    # Đọc tất cả output_XX.json → gộp thành log.json, bỏ steps[]
+    # Đọc tất cả output_XX.json -> gộp thành log.json, bỏ steps[]
     # Ghi đè log.json mỗi lần gọi
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -55,17 +64,17 @@ def rebuild_log():
             stripped_algos[algo_name] = stripped
 
         # Lấy status tổng quát của puzzle
-        overal_status = 0
+        overall_status = 0
         for algo_result in stripped_algos.values():
             s = algo_result.get("status")
             if s == 1:
-                overal_status = 1
+                overall_status = 1
                 break
 
         results.append({
             "input_id":   data["input_id"],
             "size":       data["size"],
-            "status":     overal_status,
+            "status":     overall_status,
             "algorithms": stripped_algos,
         })
 
@@ -77,7 +86,7 @@ def rebuild_log():
     }
 
     with open(LOG_FILE, "w", encoding="utf-8") as f:
-        json.dump(log_data, f, ensure_ascii=False, indent=2)
+        f.write(_compact_json(log_data))
 
     return LOG_FILE
 

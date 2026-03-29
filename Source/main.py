@@ -82,7 +82,16 @@ def _run_with_timeout(SolverClass, puzzle) -> dict:
         }
 
     if exc[0]:
-        raise exc[0]
+        # Log lỗi nhưng KHÔNG raise, tránh phá vỡ vòng lặp
+        print(f"    ERROR: {exc[0]}")
+        return {
+            "status":     STATUS_UNSOLVABLE,
+            "time_ms":    None,
+            "memory_kb":  None,
+            "inferences": None,
+            "steps":      None,
+            "solution":   None,
+        }
 
     return result[0]
 

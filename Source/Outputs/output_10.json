@@ -1,0 +1,63 @@
+{
+  "input_id": "input_10",
+  "size": 9,
+  "solution": null,
+  "algorithms": {
+    "forward_chaining": {
+      "status": 2,
+      "time_ms": 15000,
+      "memory_kb": null,
+      "inferences": null,
+      "steps": null,
+      "solution": null
+    },
+    "backward_chaining": {
+      "status": 2,
+      "time_ms": 15000,
+      "memory_kb": null,
+      "inferences": null,
+      "steps": null,
+      "solution": null
+    },
+    "astar_h1": {
+      "status": 2,
+      "time_ms": 15000,
+      "memory_kb": null,
+      "inferences": null,
+      "steps": null,
+      "solution": null
+    },
+    "astar_h2": {
+      "status": 2,
+      "time_ms": 15000,
+      "memory_kb": null,
+      "inferences": null,
+      "steps": null,
+      "solution": null
+    },
+    "astar_h3": {
+      "status": 2,
+      "time_ms": 15000,
+      "memory_kb": null,
+      "inferences": null,
+      "steps": null,
+      "solution": null
+    },
+    "backtracking": {
+      "status": 2,
+      "time_ms": 15000,
+      "memory_kb": null,
+      "inferences": null,
+      "steps": null,
+      "solution": null
+    },
+    "brute_force": {
+      "status": 2,
+      "time_ms": 15000,
+      "memory_kb": null,
+      "inferences": null,
+      "steps": null,
+      "solution": null
+    }
+  }
+}

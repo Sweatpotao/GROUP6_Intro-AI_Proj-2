@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import random
 import sys
 
@@ -33,6 +34,16 @@ CONSTRAINT_RATIO = {
     9: 0.18,
 }
 
+# ---------------------------------------------------------------------------
+# Xử lý file input_XX.json
+# ------------------------------------------------------------------------
+def _compact_json(data) -> str:
+    raw = json.dumps(data, ensure_ascii=False, indent=2)
+    def compress(match):
+        items = re.findall(r'-?[0-9]+', match.group(0))
+        return '[' + ', '.join(items) + ']'
+    raw = re.sub(r'\[[^\[\]]*?\]', compress, raw, flags=re.DOTALL)
+    return raw
 
 # ---------------------------------------------------------------------------
 # Sinh lời giải hợp lệ (Latin Square + inequality)
@@ -90,9 +101,9 @@ def _generate_constraints(grid: int, n: int, ratio: float) -> tuple:
     random.shuffle(h_positions)
     for i, j in h_positions[:num_h]:
         if grid[i][j] < grid[i][j + 1]:
-            hc[i][j] = 1   # "<"
+            hc[i][j] = 1   # <
         else:
-            hc[i][j] = -1  # ">"
+            hc[i][j] = -1  # >
 
     # Chọn ngẫu nhiên các vị trí dọc để đặt constraint
     v_positions = [(i, j) for i in range(n - 1) for j in range(n)]
@@ -179,7 +190,7 @@ def main():
 
             filepath = os.path.join(INPUT_DIR, f"{puzzle_id}.json")
             with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(puzzle, f, ensure_ascii=False, indent=2)
+                f.write(_compact_json(puzzle))
 
             print(f"  [{idx:02d}/{count}] {puzzle_id}.json  (size {n}x{n})")
             idx += 1
