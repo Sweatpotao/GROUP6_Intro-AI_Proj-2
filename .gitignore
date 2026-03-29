@@ -13,10 +13,9 @@ __pycache__/
 Thumbs.db
 
 # Generated inputs (giữ lại input_01.json làm mẫu)
-Inputs/*.json
-!Inputs/input_01.json
+Source/Inputs/*.json
+!Source/Inputs/input_01.json
 
-# Generated outputs (giữ lại output_01.json và log.json làm mẫu)
-Outputs/*.json
-!Outputs/output_01.json
-!Outputs/log.json
+# Generated outputs (giữ lại output_01.json làm mẫu)
+Source/Outputs/*.json
+!Source/Outputs/output_01.json
