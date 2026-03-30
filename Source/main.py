@@ -192,7 +192,7 @@ def main():
 
         print_separator()
 
-    print(f"\n\nLogging data...\n\n")
+    print(f"\n\nLogging data...\n")
     log_path = rebuild_log()
 
     print(f"\n{'=' * 50}")

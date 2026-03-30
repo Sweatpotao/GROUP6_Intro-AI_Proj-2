@@ -4,7 +4,25 @@ from core.solver.astar_base import AStarBase
 
 
 class AStarH3(AStarBase):
-    # A* với heuristic H3: dựa trên AC-3 (Arc Consistency 3)
+    """
+    A* với heuristic H3: dựa trên AC-3 (Arc Consistency 3).
+
+    Cách tính h(n):
+        1. Xây dựng domains cho grid hiện tại
+        2. Chạy AC-3 để lan truyền ràng buộc
+        3. Nếu có domain rỗng -> trả về infinity (nhánh chết)
+        4. Ngược lại -> h = số ô có domain > 1 (vẫn chưa xác định)
+
+    Admissible vì:
+        - Mỗi ô có domain > 1 vẫn cần đúng 1 lần gán
+        - AC-3 chỉ thu hẹp domain, không bao giờ "phát minh" thêm bước
+        -> h không bao giờ vượt quá số bước thực tế cần thêm
+
+    Đặc điểm:
+        - Mạnh nhất trong 3 heuristics: phát hiện dead-end sớm nhờ AC-3
+        - Tốn chi phí tính toán hơn H1/H2 (AC-3 chạy mỗi lần expand node)
+        - Trên puzzle lớn hoặc nhiều constraints: nodes expanded ít hơn hẳn
+    """
 
     _INF = 10 ** 9
 
@@ -105,17 +123,31 @@ class AStarH3(AStarBase):
                 if len(domains[r1][c1]) == 0:
                     return False  # Dead-end
 
-                # Domain(r1,c1) thay đổi -> thêm lại các cung liên quan
-                for i in range(self.n):
-                    if i != r1 or True:  # thêm cung hàng
-                        pass
-                # Đơn giản hóa: thêm lại cung hàng và cột của (r1,c1)
+                # Domain(r1,c1) thay đổi -> thêm lại TẤT CẢ arcs liên quan
+                hc_ref = self.puzzle["h_constraints"]
+                vc_ref = self.puzzle["v_constraints"]
+
+                # Cung hàng: các ô khác trong cùng hàng
                 for jj in range(self.n):
                     if jj != c1:
                         queue.append(((r1, jj), (r1, c1), "row"))
+
+                # Cung cột: các ô khác trong cùng cột
                 for ii in range(self.n):
                     if ii != r1:
                         queue.append(((ii, c1), (r1, c1), "col"))
+
+                # Cung inequality ngang liên quan đến (r1,c1)
+                if c1 > 0 and hc_ref[r1][c1-1] != 0:
+                    queue.append(((r1, c1-1), (r1, c1), "hineq"))
+                if c1 < self.n-1 and hc_ref[r1][c1] != 0:
+                    queue.append(((r1, c1+1), (r1, c1), "hineq_rev"))
+
+                # Cung inequality dọc liên quan đến (r1,c1)
+                if r1 > 0 and vc_ref[r1-1][c1] != 0:
+                    queue.append(((r1-1, c1), (r1, c1), "vineq"))
+                if r1 < self.n-1 and vc_ref[r1][c1] != 0:
+                    queue.append(((r1+1, c1), (r1, c1), "vineq_rev"))
 
         return True
 

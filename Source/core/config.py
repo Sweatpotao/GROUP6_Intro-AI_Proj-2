@@ -1,6 +1,6 @@
 # General limits
 MAX_STEPS = 10_000
-TIME_LIM = 15
+TIME_LIM = 10
 
 # Trạng thái sau khi giải xong
 STATUS_UNSOLVABLE = 0   # Không giải được

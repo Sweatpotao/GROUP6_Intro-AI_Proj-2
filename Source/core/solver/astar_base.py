@@ -48,6 +48,8 @@ class AStarBase(BaseSolver):
         parent = {start: None}
 
         while open_set:
+            if self.should_stop():
+                return False
             f, _, g, state = heapq.heappop(open_set)
             self.inferences += 1
 
@@ -82,9 +84,8 @@ class AStarBase(BaseSolver):
 
                         counter += 1
                         heapq.heappush(open_set, (new_f, counter, new_g, new_state))
-
-                        if new_state not in parent:
-                            parent[new_state] = (state, row, col, val)
+                        # Luôn update parent để đảm bảo lưu path tốt nhất
+                        parent[new_state] = (state, row, col, val)
 
                 grid[row][col] = 0  # hoàn tác
 
