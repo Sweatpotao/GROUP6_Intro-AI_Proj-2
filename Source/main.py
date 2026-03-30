@@ -52,6 +52,8 @@ def _status_label(status) -> str:
     if status == STATUS_UNSOLVABLE:   return "Unsolvable"
     return "Unknown"
 
+# Lock thread
+_print_lock = threading.Lock()
 
 def _run_with_timeout(SolverClass, puzzle) -> dict:
     """
@@ -60,30 +62,36 @@ def _run_with_timeout(SolverClass, puzzle) -> dict:
     """
     result = [None]
     exc    = [None]
+    solver = SolverClass(puzzle)
 
     def target():
         try:
-            result[0] = SolverClass(puzzle).solve()
+            result[0] = solver.solve()
         except Exception as e:
             exc[0] = e
 
     t = threading.Thread(target=target, daemon=True)
     t.start()
-    t.join(timeout=TIME_LIM)
+    t.join(timeout = TIME_LIM)
 
     if t.is_alive():
+        # Ra hiệu cho solver dừng
+        solver.stop_event.set()
+        # Đợi tối đa 2s để solver xử lý xong iteration hiện tại
+        t.join(timeout=2)
+
         return {
             "status":     STATUS_TIMEOUT,
             "time_ms":    TIME_LIM * 1000,
             "memory_kb":  None,
-            "inferences": None,
-            "steps":      None,
+            "inferences": solver.inferences,
+            "steps":      solver.steps[:] if solver.steps else None,
             "solution":   None,
         }
 
     if exc[0]:
-        # Log lỗi nhưng KHÔNG raise, tránh phá vỡ vòng lặp
-        print(f"    ERROR: {exc[0]}")
+        with _print_lock:
+            print(f"    ERROR: {exc[0]}")
         return {
             "status":     STATUS_UNSOLVABLE,
             "time_ms":    None,
@@ -184,6 +192,7 @@ def main():
 
         print_separator()
 
+    print(f"\n\nLogging data...\n\n")
     log_path = rebuild_log()
 
     print(f"\n{'=' * 50}")

@@ -1,27 +1,23 @@
 import time
+import threading
 import tracemalloc
 from abc import ABC, abstractmethod
 
 from core.config import MAX_STEPS, ACTION_GIVEN, ACTION_ASSIGN, ACTION_BACKTRACK, STATUS_SOLVED, STATUS_UNSOLVABLE, STATUS_STEP_LIMIT
 
-# Thằng cha
+# cLASS CHA CHO CÁC SOLVER
 class BaseSolver(ABC):
     def __init__(self, puzzle: dict):
         self.puzzle     = puzzle
         self.n          = puzzle["size"]
 
-        # Grid làm việc - copy để không mutate puzzle gốc
-        self.grid       = [row[:] for row in puzzle["grid"]]
+        # Signal dừng từ bên ngoài (set bởi main khi timeout)
+        self.stop_event = threading.Event()
 
-        # Thống kê
-        self.steps      = []       # compact array: [row, col, val, action_code]
-        self.inferences = 0        # số lần suy diễn / kiểm tra
-
-    # Interface bắt buộc - mỗi solver con phải implement
     @abstractmethod
     def _solve(self) -> bool:
         # Logic giải bài toán. Trả về status: UNSOLVABLE, SOLVED, TIMEOUT, STEP_LIMIT
-        # Solver con dùng self.grid để làm việc, gọi self.record_step() để ghi lại.
+        # Solver con dùng self.grid để làm việc, gọi self.record_step() để ghi lại
         pass
 
     # Entry point - gọi từ bên ngoài
@@ -35,19 +31,21 @@ class BaseSolver(ABC):
 
         # Đo bộ nhớ & thời gian
         tracemalloc.start()
+        tracemalloc.reset_peak()
         t0 = time.perf_counter()
 
-        solved = self._solve()
-
-        elapsed_ms = (time.perf_counter() - t0) * 1000
-        _, peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
+        try:
+            solved = self._solve()
+        finally:
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            _, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
 
         # Xác định status
-        if solved:
-            status = STATUS_SOLVED
-        elif len(self.steps) >= MAX_STEPS:
+        if len(self.steps) >= MAX_STEPS:
             status = STATUS_STEP_LIMIT
+        elif solved:
+            status = STATUS_SOLVED
         else:
             status = STATUS_UNSOLVABLE
 
@@ -65,6 +63,12 @@ class BaseSolver(ABC):
         # action: ACTION_GIVEN / ACTION_ASSIGN / ACTION_BACKTRACK
         if len(self.steps) < MAX_STEPS:
             self.steps.append([row, col, val, action])
+        else:
+            self.stop_event.set()
+
+    def should_stop(self) -> bool:
+        # Solver con gọi hàm này để biết có nên dừng sớm không
+        return self.stop_event.is_set()
 
     def is_valid(self, row: int, col: int, val: int) -> bool:
         # Kiểm tra val có hợp lệ tại (row, col) không

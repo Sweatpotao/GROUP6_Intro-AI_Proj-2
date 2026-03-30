@@ -185,25 +185,32 @@ class App(QWidget):
 
         # ===== TOP: chọn puzzle + algorithm =====
         top = QHBoxLayout()
+        top.setSpacing(6)
 
         self.puzzle_box = QComboBox()
-        self.puzzle_box.setMinimumWidth(140)
+        self.puzzle_box.setMinimumWidth(160)
         self.algo_box = QComboBox()
+        self.algo_box.setMinimumWidth(160)
         self.algo_box.addItems([name for name, _ in SOLVERS])
+
+        # Load: đọc kết quả từ output_XX.json (nhanh, không delay)
         self.load_btn  = QPushButton("Load")
-        self.solve_btn = QPushButton("Solve")
+        # Run: chạy trực tiếp thuật toán (có thể chậm)
+        self.run_btn   = QPushButton("Run")
         self.stats_btn = QPushButton("View Stats")
 
         self.load_btn.setObjectName("loadBtn")
-        self.solve_btn.setObjectName("solveBtn")
+        self.run_btn.setObjectName("solveBtn")
         self.stats_btn.setObjectName("resultBtn")
 
         top.addWidget(QLabel("Puzzle:"))
         top.addWidget(self.puzzle_box)
+        top.addSpacing(12)
         top.addWidget(QLabel("Algorithm:"))
         top.addWidget(self.algo_box)
+        top.addSpacing(12)
         top.addWidget(self.load_btn)
-        top.addWidget(self.solve_btn)
+        top.addWidget(self.run_btn)
         top.addWidget(self.stats_btn)
         layout.addLayout(top)
 
@@ -237,11 +244,11 @@ class App(QWidget):
         self.setLayout(layout)
 
         # Events
-        self.load_btn.clicked.connect(self.load_selected_puzzle)
-        self.solve_btn.clicked.connect(self.solve)
+        self.puzzle_box.currentIndexChanged.connect(self.load_selected_puzzle)
+        self.load_btn.clicked.connect(self.load_from_output)
+        self.run_btn.clicked.connect(self.run_solver)
         self.result_btn.clicked.connect(self.show_result)
         self.stats_btn.clicked.connect(self.show_stats)
-        self.puzzle_box.currentIndexChanged.connect(self.load_selected_puzzle)
 
     # ------------------------------------------------------------------
     # Load puzzles từ Inputs/
@@ -330,24 +337,75 @@ class App(QWidget):
                     self.grid_layout.addWidget(label, i, j)
 
     # ------------------------------------------------------------------
-    # Solve - chạy background thread
+    # Load from output_XX.json - nhanh, không delay
     # ------------------------------------------------------------------
 
-    def solve(self):
+    def load_from_output(self):
         if not self.puzzle:
-            QMessageBox.warning(self, "No puzzle", "Please load a puzzle first.")
+            QMessageBox.warning(self, "No puzzle", "Please select a puzzle first.")
+            return
+
+        puzzle_id = self.puzzle["id"]
+        try:
+            data = load_output(puzzle_id)
+        except FileNotFoundError:
+            QMessageBox.warning(
+                self, "No output",
+                "No output found for this puzzle.\nPlease run main.py first."
+            )
+            return
+
+        algo_name = self.algo_box.currentText()
+        algos     = data.get("algorithms", {})
+
+        if algo_name not in algos:
+            QMessageBox.warning(
+                self, "No data",
+                "No result for this algorithm in the output file."
+            )
+            return
+
+        r = algos[algo_name]
+
+        if self.result_data is None:
+            self.result_data = {}
+        self.result_data[algo_name] = r
+
+        status_map = {
+            STATUS_SOLVED:     "Solved",
+            STATUS_UNSOLVABLE: "Unsolvable",
+            STATUS_TIMEOUT:    "Timeout",
+            STATUS_STEP_LIMIT: "Step limit",
+        }
+        status = r.get("status")
+        label  = status_map.get(status, "Unknown")
+        t      = f"{r['time_ms']:.2f} ms" if r.get("time_ms") is not None else "N/A"
+        self.status_bar.setText(f"[{algo_name}] {label}  |  Time: {t}  (loaded from file)")
+
+        if status == STATUS_SOLVED and r.get("solution"):
+            self._draw_solution(r["solution"])
+
+        self.result_btn.setEnabled(True)
+
+    # ------------------------------------------------------------------
+    # Run solver - chạy trực tiếp, có thể chậm
+    # ------------------------------------------------------------------
+
+    def run_solver(self):
+        if not self.puzzle:
+            QMessageBox.warning(self, "No puzzle", "Please select a puzzle first.")
             return
         if self.solving:
             QMessageBox.warning(self, "Busy", "A solver is already running.")
             return
 
-        algo_name  = self.algo_box.currentText()
+        algo_name   = self.algo_box.currentText()
         SolverClass = dict(SOLVERS)[algo_name]
 
         self.solving = True
-        self.solve_btn.setEnabled(False)
+        self.run_btn.setEnabled(False)
         self.result_btn.setEnabled(False)
-        self.status_bar.setText(f"Running {algo_name}...")
+        self.status_bar.setText(f"Running {algo_name}... (this may take a while)")
 
         signals = SolverSignals()
         signals.finished.connect(self._on_solve_finished)
@@ -366,7 +424,7 @@ class App(QWidget):
 
     def _on_solve_finished(self, results: dict):
         self.solving = False
-        self.solve_btn.setEnabled(True)
+        self.run_btn.setEnabled(True)
 
         # Merge vào result_data (nhiều lần solve nhiều algo)
         if self.result_data is None:
@@ -403,7 +461,7 @@ class App(QWidget):
 
     def _on_solve_error(self, msg: str):
         self.solving = False
-        self.solve_btn.setEnabled(True)
+        self.run_btn.setEnabled(True)
         self.status_bar.setText(f"Error: {msg}")
 
     def _draw_solution(self, solution: list):

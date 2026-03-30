@@ -51,33 +51,5 @@ def format_puzzle(puzzle: dict) -> str:
         for row in puzzle["grid"]
     ]).replace("  0  ", "  _  ").replace(" 0 ", " _ ").replace("0", "_")
 
-
-# Hiển thị stats của 1 thuật toán sau khi chạy
-def format_stats(algo_name: str, result: dict) -> str:
-    # Status: 1=Solved, 0=Unsolvable, 2=Timeout, 3=Step limit, None=Skipped
-    
-    status = result.get("status")
-    status_map = {
-        0:    "Unsolvable",
-        1:    "Solved",
-        2:    "Timeout",
-        3:    "Step limit",
-    }
-    label = status_map.get(status, "Unknown")
- 
-    t   = f'{result["time_ms"]:.2f} ms'   if result.get("time_ms")    is not None else "N/A"
-    mem = f'{result["memory_kb"]:.1f} KB'  if result.get("memory_kb")  is not None else "N/A"
-    inf = str(result["inferences"])           if result.get("inferences") is not None else "N/A"
-    steps = str(len(result.get("steps") or [])) if result.get("steps") is not None else "N/A"
- 
-    return (
-        f"  [{algo_name}] {label}\n"
-        f"    Time      : {t}\n"
-        f"    Memory    : {mem}\n"
-        f"    Inferences: {inf}\n"
-        f"    Steps saved: {steps}"
-    )
-
-
 def print_separator(char: str = "-", width: int = 50):
     print(char * width)
