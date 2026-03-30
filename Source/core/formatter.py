@@ -1,46 +1,42 @@
+# Hiển thị lưới đã giải với các ràng buộc
 def format_grid(puzzle: dict, solution: list[list[int]]) -> str:
-    # Hiển thị lưới đã giải với các ràng buộc (>, <)
-    # Vd: output (4 x 4):
-    #     2 < 3   4   1
-    #     v
-    #     1   2 > 3   4
-    #     ^
-    #     4   1   2   3
-    #     ^
-    #     3   4   1 < 2
-
     n = puzzle["size"]
     hc = puzzle["h_constraints"]
     vc = puzzle["v_constraints"]
-    lines = []
 
+    # Độ rộng tối đa của số (để căn chỉnh)
+    w = max(len(str(x)) for row in solution for x in row)
+
+    lines = []
     for i in range(n):
-        # Hàng số & ký hiệu ngang
-        row_parts = []
+        # Hàng số
+        row_str = ""
         for j in range(n):
-            row_parts.append(str(solution[i][j]))
+            row_str += f"{solution[i][j]:>{w}}"
             if j < n - 1:
                 c = hc[i][j]
                 if c == 1:
-                    row_parts.append("<")
+                    row_str += " < "
                 elif c == -1:
-                    row_parts.append(">")
+                    row_str += " > "
                 else:
-                    row_parts.append(" ")
-        lines.append("  ".join(row_parts))
+                    row_str += "   "  # ba dấu cách để giữ khoảng cách
+        lines.append(row_str)
 
         # Hàng ký hiệu dọc
         if i < n - 1:
-            vc_row = []
+            v_row_str = ""
             for j in range(n):
                 c = vc[i][j]
                 if c == 1:
-                    vc_row.append("^")
+                    v_row_str += "^".rjust(w)
                 elif c == -1:
-                    vc_row.append("v")
+                    v_row_str += "v".rjust(w)
                 else:
-                    vc_row.append(" ")
-            lines.append("  ".join(vc_row))
+                    v_row_str += " " * w
+                if j < n - 1:
+                    v_row_str += "   "  # ba dấu cách tương ứng với khoảng cách giữa các số
+            lines.append(v_row_str)
 
     return "\n".join(lines)
 

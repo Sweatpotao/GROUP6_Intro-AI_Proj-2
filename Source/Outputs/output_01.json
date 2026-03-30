@@ -16,8 +16,8 @@
         [1, 2, 4, 3],
         [2, 3, 1, 4]
       ],
-      "time_ms": 1.399,
-      "memory_kb": 15.87,
+      "time_ms": 0.921,
+      "memory_kb": 15.93,
       "inferences": 11,
       "steps": [
         [1, 3, 2, 0],
@@ -48,8 +48,8 @@
         [1, 2, 4, 3],
         [2, 3, 1, 4]
       ],
-      "time_ms": 0.378,
-      "memory_kb": 5.05,
+      "time_ms": 0.404,
+      "memory_kb": 5.55,
       "inferences": 218,
       "steps": [
         [1, 3, 2, 0],
@@ -118,8 +118,8 @@
         [1, 2, 4, 3],
         [2, 3, 1, 4]
       ],
-      "time_ms": 2.791,
-      "memory_kb": 31.01,
+      "time_ms": 2.384,
+      "memory_kb": 32.41,
       "inferences": 46,
       "steps": [
         [1, 3, 2, 0],
@@ -148,7 +148,7 @@
         [1, 2, 4, 3],
         [2, 3, 1, 4]
       ],
-      "time_ms": 2.137,
+      "time_ms": 2.187,
       "memory_kb": 5.66,
       "inferences": 35,
       "steps": [
@@ -178,8 +178,8 @@
         [1, 2, 4, 3],
         [2, 3, 1, 4]
       ],
-      "time_ms": 14.332,
-      "memory_kb": 28.84,
+      "time_ms": 59.706,
+      "memory_kb": 29.84,
       "inferences": 12,
       "steps": [
         [1, 3, 2, 0],
@@ -208,7 +208,7 @@
         [1, 2, 4, 3],
         [2, 3, 1, 4]
       ],
-      "time_ms": 0.327,
+      "time_ms": 0.574,
       "memory_kb": 2.38,
       "inferences": 109,
       "steps": [
@@ -274,7 +274,7 @@
       "status": 2,
       "time_ms": 15000,
       "memory_kb": null,
-      "inferences": 1793567,
+      "inferences": 2124263,
       "steps": [
         [1, 3, 2, 0],
         [2, 3, 3, 0],
