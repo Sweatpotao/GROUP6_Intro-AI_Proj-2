@@ -1,152 +1,110 @@
-/* ===== GLOBAL ===== */
+/* ===== GLOBAL & WINDOW ===== */
 QWidget {
-    background-color: #f4f6fb;
-    font-family: "Segoe UI";
+    background-color: #f0f2f5;
+    color: #2c3e50;
+    font-family: "Segoe UI", sans-serif;
 }
 
-/* ===== PANEL (fake card) ===== */
-QWidget#panel {
+/* ===== SCROLL AREA & GRID ===== */
+QScrollArea#gridScrollArea {
+    border: none;
+    background-color: transparent;
+}
+
+QWidget#gridPanel, QWidget > QWidget {
+    background-color: transparent;
+}
+
+/* Cố định kích thước ô để puzzle 4x4 không bị to ra */
+QLabel#cell {
     background-color: white;
-    border-radius: 16px;
-    padding: 12px;
-    border: 1px solid #e0e6f0;
+    border: 1px solid #dcdde1;
+    border-radius: 8px;
+    font-size: 22px;
+    font-weight: bold;
+    color: #2f3640;
+    min-width: 55px;
+    max-width: 55px;
+    min-height: 55px;
+    max-height: 55px;
+}
+
+/* Hiệu ứng bóng đổ nhẹ cho ô số */
+QLabel#cell[status="given"] {
+    background-color: #f8f9fa;
+    color: #2980b9;
+    border: 2px solid #2980b9;
+}
+
+QLabel#cell[status="fill"] {
+    background-color: #dff9fb;
+    color: #27ae60;
+    border: 2px solid #27ae60;
+}
+
+QLabel#cell[status="remove"] {
+    background-color: #fab1a0;
+    border: 2px solid #e17055;
+}
+
+/* ===== RÀNG BUỘC ===== */
+QLabel#constraint {
+    color: #7f8c8d;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+/* ===== RIGHT INFO PANEL ===== */
+QFrame#infoPanel {
+    background-color: white;
+    border-radius: 20px;
+    border: 1px solid #e0e0e0;
+}
+
+QLabel#infoLabel {
+    background-color: #f8f9fa;
+    border-radius: 10px;
+    padding: 15px;
+    border-left: 5px solid #8e44ad;
+    line-height: 150%;
+}
+
+/* ===== BUTTONS ===== */
+QPushButton {
+    border: none;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 13px;
+}
+
+QPushButton#solveBtn {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8e44ad, stop:1 #a29bfe);
+    color: white;
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-weight: bold;
+}
+
+QPushButton#solveBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #732d91, stop:1 #8e44ad);
+}
+
+QPushButton#loadBtn {
+    background-color: #6c757d;
+    color: white;
+    border-radius: 8px;
+    padding: 8px 15px;
+}
+
+QPushButton#loadBtn:hover {
+    background-color: #5a6268;
 }
 
 /* ===== COMBOBOX ===== */
 QComboBox {
-    background-color: white;
-    border: 2px solid #d0d7e2;
-    border-radius: 10px;
-    padding: 6px 12px;
-    min-width: 110px;
-    font-size: 14px;
-}
-
-QComboBox:hover {
-    border: 2px solid #4a90e2;
-}
-
-/* ===== BUTTON BASE ===== */
-QPushButton {
-    background-color: #4a90e2;
-    color: white;
-    border-radius: 12px;
-    padding: 8px 16px;
-    font-weight: bold;
-    font-size: 14px;
-}
-
-QPushButton:hover {
-    background-color: #357ABD;
-}
-
-QPushButton:pressed {
-    background-color: #2c5f9e;
-}
-
-/* ===== BUTTON TYPES ===== */
-
-/* Solve */
-QPushButton#solveBtn {
-    background-color: #8e44ad;
-}
-QPushButton#solveBtn:hover {
-    background-color: #6c3483;
-}
-
-/* Load / Reload */
-QPushButton#loadBtn,
-QPushButton#reloadBtn {
-    background-color: #3498db;
-}
-QPushButton#loadBtn:hover,
-QPushButton#reloadBtn:hover {
-    background-color: #2c80b4;
-}
-
-/* Result */
-QPushButton#resultBtn {
-    background-color: #27ae60;
-}
-QPushButton#resultBtn:hover {
-    background-color: #1e874b;
-}
-
-/* Stop */
-QPushButton#stopBtn {
-    background-color: #e74c3c;
-}
-QPushButton#stopBtn:hover {
-    background-color: #c0392b;
-}
-
-/* Resume */
-QPushButton#resumeBtn {
-    background-color: #f39c12;
-}
-QPushButton#resumeBtn:hover {
-    background-color: #d68910;
-}
-
-/* ===== GRID CONTAINER ===== */
-QGridLayout {
-    margin: 20px;
-}
-
-/* ===== CELL ===== */
-QLabel#cell {
-    color: rgb(255, 255, 255);
-    background-color: white;
-    border: 2px solid #d6dbe6;
-    border-radius: 14px;
-    font-size: 20px;
-    font-weight: bold;
-    background-image: url("assets/cell.png");
-    background-repeat: no-repeat;
-    background-position: center;
-    background-origin: content;
-}
-
-/* hover */
-QLabel#cell:hover {
-    border: 4px solid #4a90e2;
-}
-
-/* ===== CELL STATES ===== */
-
-/* khi solver fill */
-QLabel#cell[status="fill"] {
-    background-color: rgba(0, 255, 8, 0.6); /* overlay màu xanh nhạt */
-    border: 5px solid #00ff0d;
-}
-
-/* khi backtrack */
-QLabel#cell[status="remove"] {
-    background-color: #ff0000;
-    border: 5px solid #ff0000;
-}
-
-/* ===== CONSTRAINT ===== */
-QLabel#constraint {
-    font-size: 18px;
-    color: #000000;
-    background: none;
-}
-
-/* ===== RESULT WINDOW ===== */
-QWidget {
-    selection-background-color: #4a90e2;
-}
-
-/* info text */
-QLabel {
-    font-size: 14px;
-    color: #333;
-}
-
-QWidget#gridPanel {
-    background-color: #fefefe;  /* màu nền bảng */
-    border-radius: 16px;
-    border: 2px solid #d6dbe6;
-    padding: 10px;
+    border: 1px solid #dcdde1;
+    border-radius: 8px;
+    padding: 5px 10px;
+    background: white;
 }

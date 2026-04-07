@@ -2,525 +2,356 @@ import sys
 import os
 import threading
 
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
-from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
+    QLabel, QComboBox, QPushButton, QFrame, QScrollArea, 
+    QGroupBox, QSlider, QMessageBox
+)
+from PyQt5.QtWidgets import QSizePolicy
+from PyQt5.QtCore import Qt, pyqtSignal, QObject
+from PyQt5.QtGui import QFont, QPainter, QColor, QPen
 
 sys.path.insert(0, os.path.dirname(__file__))
 
 from core.parser  import load_all_puzzles
-from core.logger  import save_output, load_output, rebuild_log, list_outputs
-from core.config  import TIME_LIM, STATUS_SOLVED, STATUS_TIMEOUT, STATUS_STEP_LIMIT, STATUS_UNSOLVABLE
-from main         import _run_with_timeout, SOLVERS, run_puzzle
+from core.logger  import save_output
+from core.config  import STATUS_SOLVED, STATUS_TIMEOUT, STATUS_STEP_LIMIT, STATUS_UNSOLVABLE
+from main         import _run_with_timeout, SOLVERS
 
 INPUT_DIR  = os.path.join(os.path.dirname(__file__), "Inputs")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "Outputs")
 
-# ---------------------------------------------------------------------------
-# Signal bridge: dùng để gửi kết quả từ worker thread về main (UI) thread
-# ---------------------------------------------------------------------------
-
 class SolverSignals(QObject):
-    finished = pyqtSignal(dict)   # emit khi solver xong
-    error    = pyqtSignal(str)    # emit khi có lỗi
-
-
-# ---------------------------------------------------------------------------
-# Cell widget
-# ---------------------------------------------------------------------------
+    finished = pyqtSignal(dict)
+    error    = pyqtSignal(str)
 
 class Cell(QLabel):
     def __init__(self, r, c):
         super().__init__("")
         self.r = r
         self.c = c
-        self.setFixedSize(60, 60)
+        self.setFixedSize(50, 50)
         self.setAlignment(Qt.AlignCenter)
-        self.setFont(QFont("Arial", 18))
+        self.setFont(QFont("Arial", 16))
         self.setObjectName("cell")
         self.setProperty("status", "")
 
+class LoadingOverlay(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setVisible(False)
 
-# ---------------------------------------------------------------------------
-# Result window - hiển thị stats + điều khiển step-by-step
-# ---------------------------------------------------------------------------
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
 
-class ResultWindow(QWidget):
-    def __init__(self, algo_name: str, result: dict, parent):
-        super().__init__()
-        self.setWindowTitle(f"Result - {algo_name}")
-        self.resize(420, 320)
+        # nền blur giả lập
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 120))
 
-        self.parent_app = parent
-        self.steps      = result.get("steps") or []
-        self.step_index = 0
-
-        layout = QVBoxLayout()
-
-        # Status label
-        status = result.get("status")
-        status_map = {
-            STATUS_SOLVED:     "Solved",
-            STATUS_UNSOLVABLE: "Unsolvable",
-            STATUS_TIMEOUT:    "Timeout",
-            STATUS_STEP_LIMIT: "Step limit",
-        }
-        status_label = status_map.get(status, "Unknown")
-
-        info_text = (
-            f"Algorithm : {algo_name}\n"
-            f"Status    : {status_label}\n"
-            f"Time      : {result['time_ms']:.2f} ms\n"      if result.get('time_ms') is not None else
-            f"Algorithm : {algo_name}\nStatus    : {status_label}\nTime      : N/A\n"
+        # box giữa
+        box_rect = self.rect().adjusted(
+            self.width()//3, self.height()//3,
+            -self.width()//3, -self.height()//3
         )
-        # Rebuild info text properly
-        t   = f"{result['time_ms']:.2f} ms"   if result.get("time_ms")    is not None else "N/A"
-        mem = f"{result['memory_kb']:.1f} KB"  if result.get("memory_kb")  is not None else "N/A"
-        inf = str(result["inferences"])         if result.get("inferences") is not None else "N/A"
 
-        self.info = QLabel(
-            f"Algorithm : {algo_name}\n"
-            f"Status    : {status_label}\n"
-            f"Time      : {t}\n"
-            f"Memory    : {mem}\n"
-            f"Inferences: {inf}\n"
-            f"Steps saved: {len(self.steps)}"
-        )
-        self.info.setFont(QFont("Courier New", 11))
-        layout.addWidget(self.info)
+        painter.setBrush(QColor(255, 255, 255, 230))
+        painter.setPen(Qt.NoPen)
+        painter.drawRoundedRect(box_rect, 20, 20)
 
-        # Buttons
-        btn_layout = QHBoxLayout()
-        self.step_btn   = QPushButton("Step by Step")
-        self.stop_btn   = QPushButton("Stop")
-        self.resume_btn = QPushButton("Resume")
-        self.stop_btn.setObjectName("stopBtn")
-        self.resume_btn.setObjectName("resumeBtn")
-        btn_layout.addWidget(self.step_btn)
-        btn_layout.addWidget(self.stop_btn)
-        btn_layout.addWidget(self.resume_btn)
-        layout.addLayout(btn_layout)
+        # text
+        painter.setPen(QPen(QColor("#8e44ad")))
+        painter.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        painter.drawText(box_rect, Qt.AlignCenter, "⚡ Solving...")
 
-        # Speed slider
-        speed_layout = QHBoxLayout()
-        speed_layout.addWidget(QLabel("Speed:"))
-        self.speed_slider = QSlider(Qt.Horizontal)
-        self.speed_slider.setMinimum(50)
-        self.speed_slider.setMaximum(1000)
-        self.speed_slider.setValue(200)
-        self.speed_slider.setTickInterval(100)
-        speed_layout.addWidget(self.speed_slider)
-        layout.addLayout(speed_layout)
-
-        self.setLayout(layout)
-
-        # Timer
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.play_step)
-
-        # Events
-        self.step_btn.clicked.connect(self.start_steps)
-        self.stop_btn.clicked.connect(self.timer.stop)
-        self.resume_btn.clicked.connect(lambda: self.timer.start(self.speed_slider.value()))
-
-    def start_steps(self):
-        if not self.steps:
-            QMessageBox.warning(self, "No steps", "No steps available for this result.")
-            return
-        self.parent_app.draw_grid()   # reset lưới về trạng thái ban đầu
-        self.step_index = 0
-        self.timer.start(self.speed_slider.value())
-
-    def play_step(self):
-        if self.step_index >= len(self.steps):
-            self.timer.stop()
-            return
-
-        r, c, val, action = self.steps[self.step_index]
-
-        for cell in self.parent_app.cells:
-            if cell.r == r and cell.c == c:
-                if action == 1:   # assign
-                    cell.setText(str(val))
-                    cell.setProperty("status", "fill")
-                elif action == 2:  # backtrack
-                    cell.setText("")
-                    cell.setProperty("status", "remove")
-                else:              # given (action == 0)
-                    cell.setText(str(val))
-                    cell.setProperty("status", "given")
-                cell.style().unpolish(cell)
-                cell.style().polish(cell)
-
-        self.step_index += 1
-
-
-# ---------------------------------------------------------------------------
-# Main app window
-# ---------------------------------------------------------------------------
+    def resize_to_parent(self):
+        if self.parent():
+            self.setGeometry(self.parent().rect())
 
 class App(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Futoshiki Solver")
-        self.resize(960, 860)
+        self.setWindowTitle("Futoshiki Solver - Pro Version")
+        self.resize(1100, 960)
 
-        # Data
-        self.puzzles     = []
-        self.puzzle      = None   # puzzle dict hiện tại
-        self.cells       = []
-        self.result_data = None   # dict: algo_name -> result
-        self.solving     = False
+        self.puzzles = []
+        self.puzzle = None
+        self.cells = []
+        self.current_steps = []
+        self.solving = False
 
         self._build_ui()
         self._load_puzzles()
 
-    # ------------------------------------------------------------------
-    # Build UI
-    # ------------------------------------------------------------------
-
     def _build_ui(self):
-        layout = QVBoxLayout()
-        layout.setSpacing(10)
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
 
-        # ===== TOP: chọn puzzle + algorithm =====
-        top = QHBoxLayout()
-        top.setSpacing(6)
-
+        # --- BÊN TRÁI: AREA PUZZLE ---
+        left_side = QVBoxLayout()
+        
+        # Toolbar
+        toolbar = QFrame()
+        toolbar.setObjectName("toolbar")
+        t_layout = QHBoxLayout(toolbar)
+        
         self.puzzle_box = QComboBox()
-        self.puzzle_box.setMinimumWidth(160)
         self.algo_box = QComboBox()
-        self.algo_box.setMinimumWidth(160)
         self.algo_box.addItems([name for name, _ in SOLVERS])
-
-        # Load: đọc kết quả từ output_XX.json (nhanh, không delay)
-        self.load_btn  = QPushButton("Load")
-        # Run: chạy trực tiếp thuật toán (có thể chậm)
-        self.run_btn   = QPushButton("Run")
-        self.stats_btn = QPushButton("View Stats")
-
+        self.load_btn = QPushButton("Reset Map")
         self.load_btn.setObjectName("loadBtn")
+        self.run_btn = QPushButton("Solve")
         self.run_btn.setObjectName("solveBtn")
+        
+        t_layout.addWidget(QLabel("Puzzle:"))
+        t_layout.addWidget(self.puzzle_box)
+        t_layout.addWidget(QLabel("Algo:"))
+        t_layout.addWidget(self.algo_box)
+        t_layout.addStretch()
+        t_layout.addWidget(self.load_btn)
+        t_layout.addWidget(self.run_btn)
+        left_side.addWidget(toolbar)
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setObjectName("gridScrollArea")
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setAlignment(Qt.AlignCenter)
+
+        self.grid_container = QWidget()
+        self.grid_container.setObjectName("gridPanel")
+
+        from PyQt5.QtWidgets import QSizePolicy
+
+        self.grid_container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+        # Layout cho grid
+        self.grid_layout = QGridLayout(self.grid_container)
+        self.grid_layout.setSpacing(5)
+        self.grid_layout.setContentsMargins(20, 20, 20, 20)
+
+        # Gắn vào scroll
+        self.scroll_area.setWidget(self.grid_container)
+
+        left_side.addWidget(self.scroll_area)
+
+        # Khởi tạo Overlay (Sử dụng LoadingOverlay thay vì SolvingOverlay)
+        self.overlay = LoadingOverlay(self.scroll_area)
+        
+        # Status Bar phía dưới cùng bên trái
+        self.status_bar = QLabel("Ready.")
+        left_side.addWidget(self.status_bar)
+        
+        # --- BÊN PHẢI: INFO PANEL ---
+        right_side = QVBoxLayout()
+        self.info_card = QFrame()
+        self.info_card.setObjectName("infoPanel")
+        self.info_card.setFixedWidth(300)
+        
+        info_layout = QVBoxLayout(self.info_card)
+        self.result_info = QLabel("Ready.")
+        self.result_info.setWordWrap(True)
+        self.result_info.setObjectName("infoLabel")
+        
+        step_group = QGroupBox("Visualization Controls")
+        step_vbox = QVBoxLayout()
+        self.step_label = QLabel("Step: 0 / 0")
+        self.step_slider = QSlider(Qt.Horizontal)
+        self.step_slider.setEnabled(False)
+        step_vbox.addWidget(self.step_label)
+        step_vbox.addWidget(self.step_slider)
+        step_group.setLayout(step_vbox)
+
+        self.stats_btn = QPushButton("View Full Stats")
         self.stats_btn.setObjectName("resultBtn")
 
-        top.addWidget(QLabel("Puzzle:"))
-        top.addWidget(self.puzzle_box)
-        top.addSpacing(12)
-        top.addWidget(QLabel("Algorithm:"))
-        top.addWidget(self.algo_box)
-        top.addSpacing(12)
-        top.addWidget(self.load_btn)
-        top.addWidget(self.run_btn)
-        top.addWidget(self.stats_btn)
-        layout.addLayout(top)
+        info_layout.addWidget(QLabel("<b>STATISTICS</b>"))
+        info_layout.addWidget(self.result_info, 1)
+        info_layout.addWidget(step_group)
+        info_layout.addWidget(self.stats_btn)
+        right_side.addWidget(self.info_card)
 
-        # ===== GRID =====
-        self.grid_layout = QGridLayout()
-        self.grid_layout.setAlignment(Qt.AlignCenter)
-        self.grid_layout.setHorizontalSpacing(6)
-        self.grid_layout.setVerticalSpacing(6)
-        self.grid_layout.setContentsMargins(10, 10, 10, 10)
+        # Main assembly
+        main_layout.addLayout(left_side, 3)
+        main_layout.addLayout(right_side, 0)
 
-        self.grid_panel = QWidget()
-        self.grid_panel.setObjectName("gridPanel")
-        self.grid_panel.setLayout(self.grid_layout)
-        layout.addWidget(self.grid_panel)
-
-        # ===== BOTTOM: result button =====
-        bottom = QHBoxLayout()
-        self.result_btn = QPushButton("Show Result / Visualize")
-        self.result_btn.setObjectName("resultBtn")
-        self.result_btn.setEnabled(False)
-        bottom.addStretch()
-        bottom.addWidget(self.result_btn)
-        bottom.addStretch()
-        layout.addLayout(bottom)
-
-        # ===== STATUS BAR =====
-        self.status_bar = QLabel("Ready.")
-        self.status_bar.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.status_bar)
-
-        self.setLayout(layout)
-
-        # Events
+        # Event connections
         self.puzzle_box.currentIndexChanged.connect(self.load_selected_puzzle)
-        self.load_btn.clicked.connect(self.load_from_output)
+        self.load_btn.clicked.connect(self.reload_input)
         self.run_btn.clicked.connect(self.run_solver)
-        self.result_btn.clicked.connect(self.show_result)
         self.stats_btn.clicked.connect(self.show_stats)
-
-    # ------------------------------------------------------------------
-    # Load puzzles từ Inputs/
-    # ------------------------------------------------------------------
+        self.step_slider.valueChanged.connect(self.go_to_step)
 
     def _load_puzzles(self):
-        if not os.path.exists(INPUT_DIR):
-            self.status_bar.setText("Inputs/ folder not found. Run generate_inputs.py first.")
-            return
-
-        try:
-            self.puzzles = load_all_puzzles(INPUT_DIR)
-        except FileNotFoundError:
-            self.status_bar.setText("No input files found. Run generate_inputs.py first.")
-            return
-
+        if not os.path.exists(INPUT_DIR): return
+        self.puzzles = load_all_puzzles(INPUT_DIR)
         self.puzzle_box.clear()
         for p in self.puzzles:
-            self.puzzle_box.addItem(f"{p['id']}  ({p['size']}x{p['size']})")
-
-        if self.puzzles:
-            self.load_selected_puzzle()
+            self.puzzle_box.addItem(f"{p['id']} ({p['size']}x{p['size']})")
+        if self.puzzles: self.load_selected_puzzle()
 
     def load_selected_puzzle(self):
         idx = self.puzzle_box.currentIndex()
-        if idx < 0 or idx >= len(self.puzzles):
-            return
-        self.puzzle      = self.puzzles[idx]
-        self.result_data = None
-        self.result_btn.setEnabled(False)
+        if idx < 0: return
+        self.puzzle = self.puzzles[idx]
+        self.current_steps = []
+        self.step_slider.setEnabled(False)
+        self.step_slider.setValue(0)
         self.draw_grid()
-        self.status_bar.setText(f"Loaded: {self.puzzle['id']}  ({self.puzzle['size']}x{self.puzzle['size']})")
+        self.status_bar.setText(f"Loaded {self.puzzle['id']}")
+        self.result_info.setText("Ready to solve.")
 
-    # ------------------------------------------------------------------
-    # Vẽ lưới
-    # ------------------------------------------------------------------
+    def reload_input(self):
+        self.load_selected_puzzle()
 
     def draw_grid(self):
-        # Xóa lưới cũ
-        for i in reversed(range(self.grid_layout.count())):
-            w = self.grid_layout.itemAt(i).widget()
-            if w:
-                w.deleteLater()
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
+            if item.widget(): item.widget().deleteLater()
+        
         self.cells = []
+        if not self.puzzle: return
 
-        if not self.puzzle:
-            return
-
+        n = self.puzzle["size"]
         grid = self.puzzle["grid"]
-        hc   = self.puzzle["h_constraints"]
-        vc   = self.puzzle["v_constraints"]
-        n    = self.puzzle["size"]
-        size = 2 * n - 1
+        hc = self.puzzle["h_constraints"]
+        vc = self.puzzle["v_constraints"]
 
-        for i in range(size):
-            for j in range(size):
+        for i in range(2 * n - 1):
+            for j in range(2 * n - 1):
                 if i % 2 == 0 and j % 2 == 0:
-                    # Ô số
                     r, c = i // 2, j // 2
                     cell = Cell(r, c)
-                    val  = grid[r][c]
+                    val = grid[r][c]
                     if val != 0:
                         cell.setText(str(val))
                         cell.setProperty("status", "given")
                     self.grid_layout.addWidget(cell, i, j)
                     self.cells.append(cell)
-
                 elif i % 2 == 0 and j % 2 == 1:
-                    # Ràng buộc ngang
-                    val   = hc[i // 2][j // 2]
-                    text  = "<" if val == 1 else ">" if val == -1 else ""
-                    label = QLabel(text)
-                    label.setAlignment(Qt.AlignCenter)
-                    label.setObjectName("constraint")
-                    label.setFixedSize(20, 60)
-                    self.grid_layout.addWidget(label, i, j)
-
+                    val = hc[i // 2][j // 2]
+                    text = "<" if val == 1 else ">" if val == -1 else ""
+                    self.grid_layout.addWidget(QLabel(text), i, j, Qt.AlignCenter)
                 elif i % 2 == 1 and j % 2 == 0:
-                    # Ràng buộc dọc
-                    val   = vc[i // 2][j // 2]
-                    text  = "^" if val == 1 else "v" if val == -1 else ""
-                    label = QLabel(text)
-                    label.setAlignment(Qt.AlignCenter)
-                    label.setObjectName("constraint")
-                    label.setFixedSize(60, 20)
-                    self.grid_layout.addWidget(label, i, j)
+                    val = vc[i // 2][j // 2]
+                    text = "^" if val == 1 else "v" if val == -1 else ""
+                    self.grid_layout.addWidget(QLabel(text), i, j, Qt.AlignCenter)
 
-    # ------------------------------------------------------------------
-    # Load from output_XX.json - nhanh, không delay
-    # ------------------------------------------------------------------
-
-    def load_from_output(self):
-        if not self.puzzle:
-            QMessageBox.warning(self, "No puzzle", "Please select a puzzle first.")
-            return
-
-        puzzle_id = self.puzzle["id"]
-        try:
-            data = load_output(puzzle_id)
-        except FileNotFoundError:
-            QMessageBox.warning(
-                self, "No output",
-                "No output found for this puzzle.\nPlease run main.py first."
-            )
-            return
-
-        algo_name = self.algo_box.currentText()
-        algos     = data.get("algorithms", {})
-
-        if algo_name not in algos:
-            QMessageBox.warning(
-                self, "No data",
-                "No result for this algorithm in the output file."
-            )
-            return
-
-        r = algos[algo_name]
-
-        if self.result_data is None:
-            self.result_data = {}
-        self.result_data[algo_name] = r
-
-        status_map = {
-            STATUS_SOLVED:     "Solved",
-            STATUS_UNSOLVABLE: "Unsolvable",
-            STATUS_TIMEOUT:    "Timeout",
-            STATUS_STEP_LIMIT: "Step limit",
-        }
-        status = r.get("status")
-        label  = status_map.get(status, "Unknown")
-        t      = f"{r['time_ms']:.2f} ms" if r.get("time_ms") is not None else "N/A"
-        self.status_bar.setText(f"[{algo_name}] {label}  |  Time: {t}  (loaded from file)")
-
-        if status == STATUS_SOLVED and r.get("solution"):
-            self._draw_solution(r["solution"])
-
-        self.result_btn.setEnabled(True)
-
-    # ------------------------------------------------------------------
-    # Run solver - chạy trực tiếp, có thể chậm
-    # ------------------------------------------------------------------
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.overlay.resize_to_parent()
 
     def run_solver(self):
-        if not self.puzzle:
-            QMessageBox.warning(self, "No puzzle", "Please select a puzzle first.")
-            return
-        if self.solving:
-            QMessageBox.warning(self, "Busy", "A solver is already running.")
-            return
-
-        algo_name   = self.algo_box.currentText()
+        if self.solving or not self.puzzle: return
+        
+        algo_name = self.algo_box.currentText()
         SolverClass = dict(SOLVERS)[algo_name]
 
         self.solving = True
         self.run_btn.setEnabled(False)
-        self.result_btn.setEnabled(False)
-        self.status_bar.setText(f"Running {algo_name}... (this may take a while)")
+        self.status_bar.setText(f"Solving with {algo_name}...")
+
+        self.overlay.resize_to_parent()
+        self.overlay.setVisible(True)
 
         signals = SolverSignals()
         signals.finished.connect(self._on_solve_finished)
         signals.error.connect(self._on_solve_error)
 
-        puzzle = self.puzzle
-
         def worker():
             try:
-                r = _run_with_timeout(SolverClass, puzzle)
+                r = _run_with_timeout(SolverClass, self.puzzle)
                 signals.finished.emit({algo_name: r})
             except Exception as e:
                 signals.error.emit(str(e))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_solve_finished(self, results: dict):
+    def _on_solve_finished(self, results):
         self.solving = False
         self.run_btn.setEnabled(True)
-
-        # Merge vào result_data (nhiều lần solve nhiều algo)
-        if self.result_data is None:
-            self.result_data = {}
-        self.result_data.update(results)
-
+        self.overlay.setVisible(False)
+        
         algo_name = list(results.keys())[0]
-        r         = results[algo_name]
-        status    = r.get("status")
+        r = results[algo_name]
 
-        status_map = {
-            STATUS_SOLVED:     "Solved",
-            STATUS_UNSOLVABLE: "Unsolvable",
-            STATUS_TIMEOUT:    "Timeout",
-            STATUS_STEP_LIMIT: "Step limit",
-        }
-        label = status_map.get(status, "Unknown")
-        t     = f"{r['time_ms']:.2f} ms" if r.get("time_ms") is not None else "N/A"
-        self.status_bar.setText(f"[{algo_name}] {label}  |  Time: {t}")
+        self.current_steps = r.get("steps") or []
+        status_txt = {STATUS_SOLVED: "Solved", STATUS_TIMEOUT: "Timeout", 
+                      STATUS_UNSOLVABLE: "No Solution"}.get(r['status'], "Failed")
 
-        # Nếu solved -> vẽ solution lên grid
-        if status == STATUS_SOLVED and r.get("solution"):
-            self._draw_solution(r["solution"])
+        mem = f"{r['memory_kb']:.1f} KB" if r.get('memory_kb') is not None else "N/A"
 
-        self.result_btn.setEnabled(True)
+        info = (f"<b>Algorithm:</b> {algo_name}<br>"
+                f"<b>Status:</b> {status_txt}<br>"
+                f"<b>Time:</b> {r['time_ms']:.2f} ms<br>"
+                f"<b>Memory:</b> {mem}<br>"
+                f"<b>Inferences:</b> {r.get('inferences', 0)}<br>"
+                f"<b>Total Steps:</b> {len(self.current_steps)}")
+        self.result_info.setText(info)
+        self.status_bar.setText(f"Finished: {status_txt}")
 
-        # Lưu output
-        save_output(
-            input_id   = self.puzzle["id"],
-            size       = self.puzzle["size"],
-            solution   = r.get("solution"),
-            algorithms = {algo_name: r},
-        )
+        if self.current_steps:
+            self.step_slider.setEnabled(True)
+            self.step_slider.setRange(0, len(self.current_steps))
+            self.step_slider.setValue(len(self.current_steps))
+        
+        if r['status'] == STATUS_SOLVED and r.get('solution'):
+            self._apply_solution_to_ui(r['solution'])
 
-    def _on_solve_error(self, msg: str):
-        self.solving = False
-        self.run_btn.setEnabled(True)
-        self.status_bar.setText(f"Error: {msg}")
-
-    def _draw_solution(self, solution: list):
-        n = self.puzzle["size"]
+    def _apply_solution_to_ui(self, solution):
         for cell in self.cells:
             val = solution[cell.r][cell.c]
-            cell.setText(str(val))
-            cell.setProperty("status", "fill")
+            if not cell.text():
+                cell.setText(str(val))
+                cell.setProperty("status", "fill")
+                cell.style().unpolish(cell)
+                cell.style().polish(cell)
+
+    def go_to_step(self, step_idx):
+        if not self.current_steps: return
+        self.step_label.setText(f"Step: {step_idx} / {len(self.current_steps)}")
+        
+        initial_grid = self.puzzle["grid"]
+        for cell in self.cells:
+            if initial_grid[cell.r][cell.c] == 0:
+                cell.setText("")
+                cell.setProperty("status", "")
+        
+        for i in range(step_idx):
+            r, c, val, action = self.current_steps[i]
+            target_cell = next((cell for cell in self.cells if cell.r == r and cell.c == c), None)
+            if target_cell:
+                if action == 1:
+                    target_cell.setText(str(val))
+                    target_cell.setProperty("status", "fill")
+                elif action == 2:
+                    target_cell.setText("")
+                    target_cell.setProperty("status", "remove")
+        
+        for cell in self.cells:
             cell.style().unpolish(cell)
             cell.style().polish(cell)
 
-    # ------------------------------------------------------------------
-    # Show result window
-    # ------------------------------------------------------------------
-
-    def show_result(self):
-        if not self.result_data:
-            QMessageBox.information(self, "No result", "Please run Solve first.")
-            return
-
-        algo_name = self.algo_box.currentText()
-
-        # Nếu algo hiện tại chưa chạy -> lấy algo đầu tiên có kết quả
-        if algo_name not in self.result_data:
-            algo_name = list(self.result_data.keys())[0]
-
-        r = self.result_data[algo_name]
-        self.result_window = ResultWindow(algo_name, r, self)
-        self.result_window.show()
-
-    # ------------------------------------------------------------------
-    # Show stats (gọi visualize_stats.py)
-    # ------------------------------------------------------------------
+    def _on_solve_error(self, msg):
+        self.solving = False
+        self.run_btn.setEnabled(True)
+        self.overlay.setVisible(False)
+        self.status_bar.setText(f"Error: {msg}")
 
     def show_stats(self):
-        log_path = os.path.join(OUTPUT_DIR, "log.json")
-        if not os.path.exists(log_path):
-            QMessageBox.warning(self, "No log", "log.json not found.\nRun main.py first to generate stats.")
-            return
-
         try:
             import visualize_stats
             visualize_stats.show()
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Cannot open stats:\n{e}")
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
+            QMessageBox.critical(self, "Error", f"Could not load stats: {e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
     css_path = os.path.join(os.path.dirname(__file__), "frontend.css")
     if os.path.exists(css_path):
         with open(css_path, "r", encoding="utf-8") as f:
             app.setStyleSheet(f.read())
-
-    window = App()
-    window.show()
+    
+    win = App()
+    win.show()
     sys.exit(app.exec_())
