@@ -2,7 +2,7 @@ import json
 import os
 import re
 import random
-import sys
+from core.config import VALID_SIZES
 
 # ---------------------------------------------------------------------------
 # Cấu hình
@@ -10,28 +10,25 @@ import sys
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), "Inputs")
 
-# Phân bổ theo size: 10 inputs -> 2 mỗi size, 20 -> 4, 50 -> 10
-SIZES = [4, 5, 6, 7, 9]
-
-VALID_COUNTS = [10, 20, 50]
+VALID_COUNTS = [5, 10, 20, 30]
 
 # Tỉ lệ ô given so với tổng ô (N*N), theo size
 # Puzzle nhỏ cần nhiều given hơn để có lời giải unique
 GIVEN_RATIO = {
-    4: 0.35,
-    5: 0.30,
-    6: 0.25,
-    7: 0.22,
-    9: 0.18,
+    4: 0.50,
+    5: 0.44,
+    6: 0.36,
+    7: 0.30,
+    9: 0.30,
 }
 
 # Số lượng inequality constraints theo size
 CONSTRAINT_RATIO = {
-    4: 0.30,
-    5: 0.28,
-    6: 0.25,
-    7: 0.22,
-    9: 0.18,
+    4: 0.50,
+    5: 0.45,
+    6: 0.40,
+    7: 0.35,
+    9: 0.40,
 }
 
 # ---------------------------------------------------------------------------
@@ -74,6 +71,11 @@ def _generate_latin_square(n: int) -> list:
     random.shuffle(col_order)
     grid = [[row[c] for c in col_order] for row in grid]
 
+    # Shuffle giá trị
+    symbol_map = list(range(1, n + 1))
+    random.shuffle(symbol_map)
+    grid = [[symbol_map[v - 1] for v in row] for row in grid]
+
     return grid
 
 
@@ -83,7 +85,7 @@ def _gcd(a, b):
     return a
 
 
-def _generate_constraints(grid: int, n: int, ratio: float) -> tuple:
+def _generate_constraints(grid: list, n: int, ratio: float) -> tuple:
     """
     Sinh horizontal và vertical constraints ngẫu nhiên dựa trên lời giải.
     Chỉ thêm constraint nếu nó đúng với grid (không tạo mâu thuẫn).
@@ -143,18 +145,98 @@ def _generate_givens(grid: list, n: int, ratio: float) -> list:
 
 def generate_puzzle(puzzle_id: str, n: int) -> dict:
     """Sinh 1 puzzle hoàn chỉnh với lời giải hợp lệ."""
-    solution = _generate_latin_square(n)
-    hc, vc = _generate_constraints(solution, n, CONSTRAINT_RATIO[n])
-    grid = _generate_givens(solution, n, GIVEN_RATIO[n])
+    for attempt in range(100):  # tối đa 100 lần thử
+        solution = _generate_latin_square(n)
+        hc, vc = _generate_constraints(solution, n, CONSTRAINT_RATIO[n])
+        grid = _generate_givens(solution, n, GIVEN_RATIO[n])
 
-    return {
-        "id":            puzzle_id,
-        "size":          n,
-        "grid":          grid,
-        "h_constraints": hc,
-        "v_constraints": vc,
-    }
+        if _has_unique_solution(grid, hc, vc, n):
+            return {
+                "id":            puzzle_id,
+                "size":          n,
+                "grid":          grid,
+                "h_constraints": hc,
+                "v_constraints": vc,
+            }
+    
+    raise RuntimeError(f"Failed to generate a unique puzzle for size {n} after 100 attempts.")
 
+def _solve(grid, hc, vc, n, limit=2):
+    """Backtracking solver, dừng sớm khi tìm đủ `limit` lời giải."""
+    # Tìm ô trống đầu tiên
+    for i in range(n):
+        for j in range(n):
+            if grid[i][j] == 0:
+                count = [0]
+                _solve_cell(grid, hc, vc, n, count, limit)
+                return count[0]
+    return 1  # Không còn ô trống → đây là 1 lời giải
+
+def _solve_cell(grid, hc, vc, n, count, limit):
+    if count[0] >= limit:
+        return
+
+    # MRV: chọn ô trống có ít lựa chọn nhất
+    best = None
+    best_options = None
+    for r in range(n):
+        for c in range(n):
+            if grid[r][c] == 0:
+                options = [v for v in range(1, n+1) if _is_valid(grid, hc, vc, n, r, c, v)]
+                if not options:
+                    return  # dead end, cắt luôn
+                if best is None or len(options) < len(best_options):
+                    best = (r, c)
+                    best_options = options
+
+    if best is None:
+        count[0] += 1
+        return
+
+    r, c = best
+    for val in best_options:
+        grid[r][c] = val
+        _solve_cell(grid, hc, vc, n, count, limit)
+        grid[r][c] = 0
+        if count[0] >= limit:
+            return
+
+def _is_valid(grid, hc, vc, n, r, c, val):
+    # Kiểm tra Latin Square: không trùng hàng/cột
+    for k in range(n):
+        if grid[r][k] == val or grid[k][c] == val:
+            return False
+
+    # Kiểm tra h_constraints: hàng r
+    grid[r][c] = val  # tạm đặt để kiểm tra
+    ok = True
+    for j in range(n - 1):
+        a, b = grid[r][j], grid[r][j + 1]
+        if a != 0 and b != 0 and hc[r][j] != 0:
+            if hc[r][j] == 1 and not (a < b):
+                ok = False; break
+            if hc[r][j] == -1 and not (a > b):
+                ok = False; break
+    # Kiểm tra v_constraints: cột c
+    if ok:
+        for i in range(n - 1):
+            a, b = grid[i][c], grid[i + 1][c]
+            if a != 0 and b != 0 and vc[i][c] != 0:
+                if vc[i][c] == 1 and not (a < b):
+                    ok = False; break
+                if vc[i][c] == -1 and not (a > b):
+                    ok = False; break
+    grid[r][c] = 0  # hoàn tác
+    return ok
+
+
+def _has_unique_solution(grid, hc, vc, n) -> bool:
+    """Trả về True nếu puzzle có đúng 1 lời giải."""
+    import copy
+    g = copy.deepcopy(grid)
+    count = [0]
+    _solve_cell(g, hc, vc, n, count, limit=2)
+    return count[0] == 1
 
 # ---------------------------------------------------------------------------
 # Main
@@ -170,21 +252,23 @@ def main():
 
     while True:
         try:
-            count = int(input("How many inputs to generate? (10/20/50): ").strip())
+            count = int(input("How many inputs to generate? (5/10/20/30): ").strip())
             if count in VALID_COUNTS:
                 break
             print(f"Please enter one of: {VALID_COUNTS}")
         except ValueError:
             print("Invalid input. Please enter a number.")
 
-    per_size = count // len(SIZES)  # 10->2, 20->4, 50->10
+    base = count // len(VALID_SIZES)
+    remainder = count % len(VALID_SIZES)
+    per_size_list = [base + (1 if i < remainder else 0) for i in range(len(VALID_SIZES))]
 
-    print(f"\nGenerating {count} inputs ({per_size} per size: {SIZES})...")
+    print(f"\nGenerating {count} inputs...")
     print("-" * 30)
 
     idx = 1
-    for n in SIZES:
-        for _ in range(per_size):
+    for size_idx, n in enumerate(VALID_SIZES):
+        for _ in range(per_size_list[size_idx]):
             puzzle_id = f"input_{idx:02d}"
             puzzle = generate_puzzle(puzzle_id, n)
 

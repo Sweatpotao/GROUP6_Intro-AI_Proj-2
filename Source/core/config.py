@@ -15,12 +15,3 @@ ACTION_BACKTRACK = 2    # quay lui / xóa
 
 # Kích thước game Futoshiki
 VALID_SIZES = [4, 5, 6, 7, 9]
-
-# Phân bổ input theo size đối với 10 inputs (Mặc định phân bổ đều, có thể chỉnh sửa)
-INPUT_DISTRIBUTION = {
-    4: 2,
-    5: 2,
-    6: 2,
-    7: 2,
-    9: 2,
-}  # x2 nếu chọn 20 inputs
