@@ -1,6 +1,4 @@
-import time
 import threading
-import tracemalloc
 from abc import ABC, abstractmethod
 
 from core.config import MAX_STEPS, ACTION_GIVEN, ACTION_ASSIGN, ACTION_BACKTRACK, STATUS_SOLVED, STATUS_UNSOLVABLE, STATUS_STEP_LIMIT
@@ -29,17 +27,10 @@ class BaseSolver(ABC):
         # Ghi các ô given trước khi chạy thuật toán
         self._record_givens()
 
-        # Đo bộ nhớ & thời gian
-        tracemalloc.start()
-        tracemalloc.reset_peak()
-        t0 = time.perf_counter()
-
         try:
             solved = self._solve()
-        finally:
-            elapsed_ms = (time.perf_counter() - t0) * 1000
-            _, peak = tracemalloc.get_traced_memory()
-            tracemalloc.stop()
+        except StopIteration:
+            solved = False
 
         # Xác định status
         if len(self.steps) >= MAX_STEPS:
@@ -52,8 +43,8 @@ class BaseSolver(ABC):
         return {
             "status":       status,
             "solution":     [row[:] for row in self.grid] if solved else None,
-            "time_ms":      round(elapsed_ms, 3),
-            "memory_kb":    round(peak / 1024, 2),
+            "time_ms":      None,       # Update: _run_with_timeout() ở main sẽ xử lý
+            "memory_kb":    None,       # Update: _run_with_timeout() ở main sẽ xử lý
             "inferences":   self.inferences,
             "steps":        self.steps,  # đã được cap tại MAX_STEPS trong record_step()
         }
