@@ -19,7 +19,7 @@ GIVEN_RATIO = {
     5: 0.44,
     6: 0.36,
     7: 0.30,
-    9: 0.30,
+    9: 0.20,
 }
 
 # Số lượng inequality constraints theo size
@@ -28,7 +28,7 @@ CONSTRAINT_RATIO = {
     5: 0.45,
     6: 0.40,
     7: 0.35,
-    9: 0.40,
+    9: 0.30,
 }
 
 # ---------------------------------------------------------------------------
@@ -45,6 +45,10 @@ def _compact_json(data) -> str:
 # ---------------------------------------------------------------------------
 # Sinh lời giải hợp lệ (Latin Square + inequality)
 # ---------------------------------------------------------------------------
+
+def _gcd(a, b):
+    if b == 0: return a
+    return _gcd(b, a % b)
 
 def _generate_latin_square(n: int) -> list:
     """
@@ -77,13 +81,6 @@ def _generate_latin_square(n: int) -> list:
     grid = [[symbol_map[v - 1] for v in row] for row in grid]
 
     return grid
-
-
-def _gcd(a, b):
-    while b:
-        a, b = b, a % b
-    return a
-
 
 def _generate_constraints(grid: list, n: int, ratio: float) -> tuple:
     """
@@ -238,6 +235,29 @@ def _has_unique_solution(grid, hc, vc, n) -> bool:
     _solve_cell(g, hc, vc, n, count, limit=2)
     return count[0] == 1
 
+def _cleanup_old_files():
+    """Xóa các file input/output cũ trước khi sinh puzzle mới."""
+    output_dir = os.path.join(os.path.dirname(__file__), "Outputs")
+    deleted = 0
+
+    print(f"\nCleaning old file(s)...")
+    for directory, pattern in [
+        (INPUT_DIR,  r"^input_\d+\.json$"),
+        (output_dir, r"^output_\d+\.json$"),
+        (output_dir, r"^log\.json$"),
+    ]:
+        if not os.path.exists(directory):
+            continue
+        for fname in os.listdir(directory):
+            if re.match(pattern, fname):
+                os.remove(os.path.join(directory, fname))
+                deleted += 1
+
+    if deleted:
+        print(f"Cleaned up {deleted} old file(s).\n")
+    else:
+        print(f"No file found.\n")
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -248,11 +268,15 @@ def main():
     # Hỏi số lượng inputs
     print("Futoshiki - Input Generator")
     print("-" * 30)
+
+    # Clear file cũ
+    _cleanup_old_files()
+
     print(f"Valid options: {VALID_COUNTS}")
 
     while True:
         try:
-            count = int(input("How many inputs to generate? (5/10/20/30): ").strip())
+            count = int(input("How many inputs to generate? : ").strip())
             if count in VALID_COUNTS:
                 break
             print(f"Please enter one of: {VALID_COUNTS}")
@@ -280,7 +304,7 @@ def main():
             idx += 1
 
     print("-" * 30)
-    print(f"Done. {count} files saved to: {INPUT_DIR}")
+    print(f"Done. {count} files saved to: {INPUT_DIR}\n")
 
 
 if __name__ == "__main__":
