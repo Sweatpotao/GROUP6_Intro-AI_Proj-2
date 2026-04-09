@@ -1,6 +1,8 @@
 import os
 import sys
 import threading
+import time
+import tracemalloc
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -64,6 +66,11 @@ def _run_with_timeout(SolverClass, puzzle) -> dict:
     exc    = [None]
     solver = SolverClass(puzzle)
 
+    # Khởi động đo đạc
+    tracemalloc.start()
+    tracemalloc.reset_peak()
+    t0 = time.perf_counter()
+
     def target():
         try:
             result[0] = solver.solve()
@@ -72,8 +79,16 @@ def _run_with_timeout(SolverClass, puzzle) -> dict:
 
     t = threading.Thread(target=target, daemon=True)
     t.start()
+
+    # Đợi Solver hoặc timeout
     t.join(timeout = TIME_LIM)
 
+    # Lấy data ngay lập tức
+    _, peak = tracemalloc.get_traced_memory()
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    tracemalloc.stop()
+
+    # TH: TIMEOUT
     if t.is_alive():
         # Ra hiệu cho solver dừng
         solver.stop_event.set()
@@ -83,12 +98,13 @@ def _run_with_timeout(SolverClass, puzzle) -> dict:
         return {
             "status":     STATUS_TIMEOUT,
             "time_ms":    TIME_LIM * 1000,
-            "memory_kb":  None,
+            "memory_kb":  round(peak / 1024, 2),
             "inferences": solver.inferences,
             "steps":      solver.steps[:] if solver.steps else None,
             "solution":   None,
         }
 
+    # TH: ERROR
     if exc[0]:
         with _print_lock:
             print(f"    ERROR: {exc[0]}")
@@ -100,6 +116,11 @@ def _run_with_timeout(SolverClass, puzzle) -> dict:
             "steps":      None,
             "solution":   None,
         }
+    
+    # TH: NO-TIMEOUT
+    if result[0] and isinstance(result[0], dict):
+        result[0]["memory_kb"]  = round(peak / 1024, 2)
+        result[0]["time_ms"]    = round(elapsed_ms, 3)
 
     return result[0]
 
@@ -131,9 +152,9 @@ def run_puzzle(puzzle: dict, verbose: bool = True) -> tuple:
 
         if verbose:
             label = _status_label(r.get("status"))
-            t     = f'{r["time_ms"]:.2f} ms'   if r["time_ms"]    is not None else "N/A"
+            t     = f'{r["time_ms"]:.2f} ms'    if r["time_ms"]    is not None else "N/A"
             mem   = f'{r["memory_kb"]:.1f} KB'  if r["memory_kb"]  is not None else "N/A"
-            inf   = str(r["inferences"])         if r["inferences"] is not None else "N/A"
+            inf   = str(r["inferences"])        if r["inferences"] is not None else "N/A"
             steps = str(len(r["steps"] or []))  if r["steps"]      is not None else "N/A"
             print(f"  [{name}] {label}")
             print(f"    Time      : {t}")
@@ -195,7 +216,7 @@ def main():
     print(f"\n\nLogging data...\n")
     log_path = rebuild_log()
 
-    print(f"\n{'=' * 50}")
+    print(f"{'=' * 50}")
     print(f"  Done: {success}/{total} puzzles solved.")
     print(f"  Log : {log_path}")
     print(f"{'=' * 50}")

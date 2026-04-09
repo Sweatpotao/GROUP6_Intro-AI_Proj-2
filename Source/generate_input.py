@@ -7,7 +7,6 @@ from core.config import VALID_SIZES
 # ---------------------------------------------------------------------------
 # Cấu hình
 # ---------------------------------------------------------------------------
-
 INPUT_DIR = os.path.join(os.path.dirname(__file__), "Inputs")
 
 VALID_COUNTS = [5, 10, 20, 30]
@@ -15,10 +14,10 @@ VALID_COUNTS = [5, 10, 20, 30]
 # Tỉ lệ ô given so với tổng ô (N*N), theo size
 # Puzzle nhỏ cần nhiều given hơn để có lời giải unique
 GIVEN_RATIO = {
-    4: 0.50,
-    5: 0.44,
-    6: 0.36,
-    7: 0.30,
+    4: 0.40,
+    5: 0.36,
+    6: 0.30,
+    7: 0.25,
     9: 0.20,
 }
 
@@ -45,7 +44,6 @@ def _compact_json(data) -> str:
 # ---------------------------------------------------------------------------
 # Sinh lời giải hợp lệ (Latin Square + inequality)
 # ---------------------------------------------------------------------------
-
 def _gcd(a, b):
     if b == 0: return a
     return _gcd(b, a % b)
@@ -115,7 +113,6 @@ def _generate_constraints(grid: list, n: int, ratio: float) -> tuple:
 
     return hc, vc
 
-
 def _generate_givens(grid: list, n: int, ratio: float) -> list:
     """
     Chọn ngẫu nhiên một số ô làm given, trả về grid mới (0 = trống).
@@ -139,7 +136,6 @@ def _generate_givens(grid: list, n: int, ratio: float) -> list:
 # ---------------------------------------------------------------------------
 # Tạo 1 puzzle
 # ---------------------------------------------------------------------------
-
 def generate_puzzle(puzzle_id: str, n: int) -> dict:
     """Sinh 1 puzzle hoàn chỉnh với lời giải hợp lệ."""
     for attempt in range(100):  # tối đa 100 lần thử
@@ -154,20 +150,10 @@ def generate_puzzle(puzzle_id: str, n: int) -> dict:
                 "grid":          grid,
                 "h_constraints": hc,
                 "v_constraints": vc,
+                "answer":        solution,
             }
     
     raise RuntimeError(f"Failed to generate a unique puzzle for size {n} after 100 attempts.")
-
-def _solve(grid, hc, vc, n, limit=2):
-    """Backtracking solver, dừng sớm khi tìm đủ `limit` lời giải."""
-    # Tìm ô trống đầu tiên
-    for i in range(n):
-        for j in range(n):
-            if grid[i][j] == 0:
-                count = [0]
-                _solve_cell(grid, hc, vc, n, count, limit)
-                return count[0]
-    return 1  # Không còn ô trống → đây là 1 lời giải
 
 def _solve_cell(grid, hc, vc, n, count, limit):
     if count[0] >= limit:
@@ -261,7 +247,6 @@ def _cleanup_old_files():
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-
 def main():
     os.makedirs(INPUT_DIR, exist_ok=True)
 

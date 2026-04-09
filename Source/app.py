@@ -1,14 +1,15 @@
 import sys
 import os
 import threading
+import json
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
     QLabel, QComboBox, QPushButton, QFrame, QScrollArea, 
-    QGroupBox, QSlider, QMessageBox
+    QGroupBox, QSlider, QMessageBox, QListWidget
 )
 from PyQt5.QtWidgets import QSizePolicy
-from PyQt5.QtCore import Qt, pyqtSignal, QObject
+from PyQt5.QtCore import Qt, pyqtSignal, QObject, QTimer
 from PyQt5.QtGui import QFont, QPainter, QColor, QPen
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -71,7 +72,7 @@ class LoadingOverlay(QWidget):
 class App(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Futoshiki Solver - Pro Version")
+        self.setWindowTitle("Futoshiki Solver")
         self.resize(1100, 960)
 
         self.puzzles = []
@@ -79,6 +80,10 @@ class App(QWidget):
         self.cells = []
         self.current_steps = []
         self.solving = False
+
+        self.auto_timer = QTimer(self)
+        self.auto_timer.timeout.connect(self.auto_step)
+        self.is_auto_running = False
 
         self._build_ui()
         self._load_puzzles()
@@ -103,6 +108,8 @@ class App(QWidget):
         self.load_btn.setObjectName("loadBtn")
         self.run_btn = QPushButton("Solve")
         self.run_btn.setObjectName("solveBtn")
+        self.load_data_btn = QPushButton("Load Data")
+        self.load_data_btn.setObjectName("loadDataBtn")
         
         t_layout.addWidget(QLabel("Puzzle:"))
         t_layout.addWidget(self.puzzle_box)
@@ -110,6 +117,7 @@ class App(QWidget):
         t_layout.addWidget(self.algo_box)
         t_layout.addStretch()
         t_layout.addWidget(self.load_btn)
+        t_layout.addWidget(self.load_data_btn)
         t_layout.addWidget(self.run_btn)
         left_side.addWidget(toolbar)
 
@@ -120,8 +128,6 @@ class App(QWidget):
 
         self.grid_container = QWidget()
         self.grid_container.setObjectName("gridPanel")
-
-        from PyQt5.QtWidgets import QSizePolicy
 
         self.grid_container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
@@ -155,19 +161,47 @@ class App(QWidget):
         
         step_group = QGroupBox("Visualization Controls")
         step_vbox = QVBoxLayout()
-        self.step_label = QLabel("Step: 0 / 0")
-        self.step_slider = QSlider(Qt.Horizontal)
-        self.step_slider.setEnabled(False)
-        step_vbox.addWidget(self.step_label)
-        step_vbox.addWidget(self.step_slider)
+        self.step_list = QListWidget()
+        step_vbox.addWidget(self.step_list)
         step_group.setLayout(step_vbox)
 
         self.stats_btn = QPushButton("View Full Stats")
         self.stats_btn.setObjectName("resultBtn")
 
         info_layout.addWidget(QLabel("<b>STATISTICS</b>"))
-        info_layout.addWidget(self.result_info, 1)
-        info_layout.addWidget(step_group)
+        self.result_info.setFixedHeight(150)
+        info_layout.addWidget(self.result_info)
+        info_layout.addWidget(step_group, 1)
+
+        # --- THÊM KHỐI AUTO RUN ---
+        auto_group = QGroupBox("Auto Run")
+        auto_vbox = QVBoxLayout(auto_group)
+
+        btn_hbox = QHBoxLayout()
+        self.btn_auto_run = QPushButton("Run")
+        self.btn_auto_run.setObjectName("runAutoBtn")
+        self.btn_auto_run.setProperty("state", "run")
+
+        self.btn_auto_stop = QPushButton("Stop")
+        self.btn_auto_stop.setObjectName("stopAutoBtn")
+        self.btn_auto_stop.setProperty("state", "stop")
+        self.btn_auto_stop.setEnabled(False) # Ẩn nút Stop khi chưa chạy
+
+        btn_hbox.addWidget(self.btn_auto_run)
+        btn_hbox.addWidget(self.btn_auto_stop)
+
+        self.speed_label = QLabel("Speed: 10 step/s")
+        self.speed_slider = QSlider(Qt.Horizontal)
+        self.speed_slider.setRange(3, 200) # Từ 3 đến 200 step/s
+        self.speed_slider.setValue(10)
+
+        auto_vbox.addLayout(btn_hbox)
+        auto_vbox.addWidget(self.speed_label)
+        auto_vbox.addWidget(self.speed_slider)
+
+        info_layout.addWidget(auto_group)
+        # --- KẾT THÚC KHỐI AUTO RUN ---
+
         info_layout.addWidget(self.stats_btn)
         right_side.addWidget(self.info_card)
 
@@ -178,9 +212,13 @@ class App(QWidget):
         # Event connections
         self.puzzle_box.currentIndexChanged.connect(self.load_selected_puzzle)
         self.load_btn.clicked.connect(self.reload_input)
+        self.load_data_btn.clicked.connect(self.load_data_from_json)
         self.run_btn.clicked.connect(self.run_solver)
         self.stats_btn.clicked.connect(self.show_stats)
-        self.step_slider.valueChanged.connect(self.go_to_step)
+        self.step_list.currentRowChanged.connect(self.go_to_step)
+        self.btn_auto_run.clicked.connect(self.toggle_auto_run)
+        self.btn_auto_stop.clicked.connect(self.toggle_pause)
+        self.speed_slider.valueChanged.connect(self.update_speed)
 
     def _load_puzzles(self):
         if not os.path.exists(INPUT_DIR): return
@@ -195,11 +233,77 @@ class App(QWidget):
         if idx < 0: return
         self.puzzle = self.puzzles[idx]
         self.current_steps = []
-        self.step_slider.setEnabled(False)
-        self.step_slider.setValue(0)
+        self.step_list.clear()
+        self.stop_auto_run()
         self.draw_grid()
         self.status_bar.setText(f"Loaded {self.puzzle['id']}")
         self.result_info.setText("Ready to solve.")
+
+    # ------ Hiển thị list steps ------
+    def populate_step_list(self):
+        self.step_list.clear()
+        if not self.current_steps: return
+        
+        for i, step in enumerate(self.current_steps):
+            # Format chuẩn: [r, c, val, action]
+            r, c, val, action = step
+            if action == 0:
+                act_str = "Given"
+            elif action == 1:
+                act_str = "Fill"
+            else:
+                act_str = "Remove"
+                
+            self.step_list.addItem(f"Step {i+1}: {act_str} '{val}' at ({r},{c})")
+
+    # ------ Đọc JSON từ Outputs\ ------
+    def load_data_from_json(self):
+        if not self.puzzle: return
+        
+        # Chuyển input_XX thành output_XX
+        input_id = self.puzzle['id']
+        output_filename = input_id.replace("input_", "output_") + ".json"
+        json_path = os.path.join(OUTPUT_DIR, output_filename)
+
+        if not os.path.exists(json_path):
+            QMessageBox.warning(self, "Not Found", f"Cannot find saved data at:\n{json_path}")
+            return
+
+        try:
+            with open(json_path, 'r') as f:
+                data = json.load(f)
+
+            algo_name = self.algo_box.currentText()
+            if algo_name not in data.get("algorithms", {}):
+                QMessageBox.warning(self, "No Data", f"No data found for {algo_name} in JSON file.")
+                return
+
+            r = data["algorithms"][algo_name]
+
+            # Cập nhật steps và UI
+            self.current_steps = r.get("steps", [])
+            self.populate_step_list()
+
+            status_txt = "Solved" if r['status'] == 1 else "Failed/Timeout"
+            mem = f"{r['memory_kb']} KB" if r.get('memory_kb') is not None else "N/A"
+
+            info = (f"<b>[LOADED FROM JSON]</b><br>"
+                    f"<b>Algorithm:</b> {algo_name}<br>"
+                    f"<b>Status:</b> {status_txt}<br>"
+                    f"<b>Time:</b> {r.get('time_ms', 0):.2f} ms<br>"
+                    f"<b>Memory:</b> {mem}<br>"
+                    f"<b>Inferences:</b> {r.get('inferences', 0)}<br>"
+                    f"<b>Total Steps:</b> {len(self.current_steps)}")
+            
+            self.result_info.setText(info)
+            self.status_bar.setText(f"Loaded from JSON for {algo_name}")
+
+            # Tự động nhảy tới step cuối cùng để hiển thị kết quả
+            if self.current_steps:
+                self.step_list.setCurrentRow(len(self.current_steps) - 1)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to parse JSON:\n{e}")
 
     def reload_input(self):
         self.load_selected_puzzle()
@@ -276,8 +380,12 @@ class App(QWidget):
         r = results[algo_name]
 
         self.current_steps = r.get("steps") or []
-        status_txt = {STATUS_SOLVED: "Solved", STATUS_TIMEOUT: "Timeout", 
-                      STATUS_UNSOLVABLE: "No Solution"}.get(r['status'], "Failed")
+        status_txt = {
+            STATUS_SOLVED: "Solved", 
+            STATUS_TIMEOUT: "Timeout", 
+            STATUS_STEP_LIMIT: "Step limit",
+            STATUS_UNSOLVABLE: "Unsolvable"
+        }.get(r['status'], "Unknown")
 
         mem = f"{r['memory_kb']:.1f} KB" if r.get('memory_kb') is not None else "N/A"
 
@@ -291,9 +399,8 @@ class App(QWidget):
         self.status_bar.setText(f"Finished: {status_txt}")
 
         if self.current_steps:
-            self.step_slider.setEnabled(True)
-            self.step_slider.setRange(0, len(self.current_steps))
-            self.step_slider.setValue(len(self.current_steps))
+            self.populate_step_list()
+            self.step_list.setCurrentRow(len(self.current_steps) - 1)
         
         if r['status'] == STATUS_SOLVED and r.get('solution'):
             self._apply_solution_to_ui(r['solution'])
@@ -307,30 +414,129 @@ class App(QWidget):
                 cell.style().unpolish(cell)
                 cell.style().polish(cell)
 
-    def go_to_step(self, step_idx):
-        if not self.current_steps: return
-        self.step_label.setText(f"Step: {step_idx} / {len(self.current_steps)}")
+    def go_to_step(self, row_idx):
+        if not self.current_steps or row_idx < 0: return
         
+        # Reset grid về trạng thái trống ban đầu
         initial_grid = self.puzzle["grid"]
         for cell in self.cells:
             if initial_grid[cell.r][cell.c] == 0:
                 cell.setText("")
                 cell.setProperty("status", "")
         
-        for i in range(step_idx):
+        # Áp dụng các steps từ đầu cho tới step đang chọn trong List (row_idx)
+        for i in range(row_idx + 1):
             r, c, val, action = self.current_steps[i]
             target_cell = next((cell for cell in self.cells if cell.r == r and cell.c == c), None)
+            
             if target_cell:
-                if action == 1:
+                # Dựa theo format JSON
+                if action == 0 or action == 1:
                     target_cell.setText(str(val))
-                    target_cell.setProperty("status", "fill")
+                    target_cell.setProperty("status", "fill" if action == 1 else "given")
                 elif action == 2:
                     target_cell.setText("")
                     target_cell.setProperty("status", "remove")
         
+        # Cập nhật giao diện
         for cell in self.cells:
             cell.style().unpolish(cell)
             cell.style().polish(cell)
+
+    # ==================== AUTO RUN LOGIC ====================
+    def update_speed(self):
+        speed = self.speed_slider.value()
+        self.speed_label.setText(f"Speed: {speed} step/s")
+        # Cập nhật tốc độ ngay lập tức nếu đang chạy
+        if self.is_auto_running and self.auto_timer.isActive():
+            self.auto_timer.setInterval(int(1000 / speed))
+
+    def toggle_auto_run(self):
+        if not self.current_steps:
+            return
+
+        if not self.is_auto_running:
+            # BẮT ĐẦU CHẠY
+            self.is_auto_running = True
+            
+            # Đổi thành "End" (Đỏ)
+            self.btn_auto_run.setText("End")
+            self.btn_auto_run.setProperty("state", "end")
+            self.btn_auto_run.style().unpolish(self.btn_auto_run)
+            self.btn_auto_run.style().polish(self.btn_auto_run)
+
+            # Reset nút kia về "Stop" (Đỏ)
+            self.btn_auto_stop.setEnabled(True)
+            self.btn_auto_stop.setText("Stop")
+            self.btn_auto_stop.setProperty("state", "stop")
+            self.btn_auto_stop.style().unpolish(self.btn_auto_stop)
+            self.btn_auto_stop.style().polish(self.btn_auto_stop)
+
+            # Bắt đầu chạy lại từ step 0
+            self.step_list.setCurrentRow(0)
+
+            speed = self.speed_slider.value()
+            self.auto_timer.start(int(1000 / speed))
+        else:
+            # END
+            # Nhảy tới step cuối
+            self.step_list.setCurrentRow(len(self.current_steps) - 1)
+            
+            # Gọi hàm dừng auto
+            self.stop_auto_run()
+
+    def toggle_pause(self):
+        if not self.is_auto_running:
+            return
+        
+        if self.auto_timer.isActive():
+            # STOP
+            self.auto_timer.stop()
+            
+            # Đổi thành "Resume" (Xanh)
+            self.btn_auto_stop.setText("▶ Resume")
+            self.btn_auto_stop.setProperty("state", "resume")
+            self.btn_auto_stop.style().unpolish(self.btn_auto_stop)
+            self.btn_auto_stop.style().polish(self.btn_auto_stop)
+        else:
+            # RESUME
+            speed = self.speed_slider.value()
+            self.auto_timer.start(int(1000 / speed))
+            
+            # Đổi thành "Stop" (Đỏ)
+            self.btn_auto_stop.setText("Stop")
+            self.btn_auto_stop.setProperty("state", "stop")
+            self.btn_auto_stop.style().unpolish(self.btn_auto_stop)
+            self.btn_auto_stop.style().polish(self.btn_auto_stop)
+
+    def stop_auto_run(self):
+        self.is_auto_running = False
+        self.auto_timer.stop()
+
+        # Reset nút 1 về "Run" (Màu Xanh)
+        self.btn_auto_run.setText("Run")
+        self.btn_auto_run.setProperty("state", "run")
+        self.btn_auto_run.style().unpolish(self.btn_auto_run)
+        self.btn_auto_run.style().polish(self.btn_auto_run)
+
+        # Reset nút 2 về "Stop" và vô hiệu hóa
+        self.btn_auto_stop.setText("Stop")
+        self.btn_auto_stop.setProperty("state", "stop")
+        self.btn_auto_stop.setEnabled(False)
+        self.btn_auto_stop.style().unpolish(self.btn_auto_stop)
+        self.btn_auto_stop.style().polish(self.btn_auto_stop)
+
+    def auto_step(self):
+        current_row = self.step_list.currentRow()
+        max_row = len(self.current_steps) - 1
+        
+        # Nhảy xuống 1 step
+        if current_row < max_row:
+            # Chọn row mới, sự kiện go_to_step sẽ tự động được gọi do chúng ta đã connect tín hiệu
+            self.step_list.setCurrentRow(current_row + 1)
+        else:
+            # Đã tới step cuối -> tự động tắt Auto Run
+            self.stop_auto_run()
 
     def _on_solve_error(self, msg):
         self.solving = False

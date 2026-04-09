@@ -182,3 +182,76 @@ QSlider::handle:horizontal {
 QSlider::handle:horizontal:hover {
     background: #732d91;
 }
+
+/* ===== LOAD DATA BUTTON ===== */
+QPushButton#loadDataBtn {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e67e22, stop:1 #d35400);
+    color: white;
+    border-radius: 8px;
+    padding: 8px 15px;
+}
+
+QPushButton#loadDataBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e63e22, stop:1 #e63a61);
+}
+
+/* ===== STEP LIST ===== */
+QListWidget {
+    outline: None;
+    border: 1px solid #e1dedc;
+    border-radius: 8px;
+    padding: 5px;
+    background-color: white;
+    font-size: 13px;
+    color: #2c3e50;
+}
+
+QListWidget::item {
+    padding: 6px;
+    border-bottom: 1px solid #f0f2f5;
+    border-radius: 4px;
+}
+
+QListWidget::item:hover {
+    background-color: #f1f2f6;
+}
+
+QListWidget::item:selected {
+    background-color: #26b3cc;
+    color: white;
+}
+
+/* ===== AUTO RUN BUTTONS ===== */
+/* RUN state */
+QPushButton#runAutoBtn[state="run"] {
+    background-color: #27ae60;
+    color: white;
+}
+QPushButton#runAutoBtn[state="run"]:hover { background-color: #219150; }
+
+/* END state */
+QPushButton#runAutoBtn[state="end"] {
+    background-color: #e74c3c;
+    color: white;
+}
+QPushButton#runAutoBtn[state="end"]:hover { background-color: #c0392b; }
+
+/* STOP state */
+QPushButton#stopAutoBtn[state="stop"] {
+    background-color: #8d46ab;
+    color: white;
+}
+QPushButton#stopAutoBtn[state="stop"]:hover { background-color: #732D91; }
+
+/* RESUME state */
+QPushButton#stopAutoBtn[state="resume"] {
+    background-color: #27ae60;
+    color: white;
+}
+QPushButton#stopAutoBtn[state="resume"]:hover { background-color: #219150; }
+
+/* Khi bị vô hiệu hóa (Disabled) */
+QPushButton#stopAutoBtn:disabled {
+    background-color: #bdc3c7;
+    color: #ecf0f1;
+}
