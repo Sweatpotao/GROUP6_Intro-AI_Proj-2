@@ -47,6 +47,13 @@ QLabel#cell[status="remove"] {
     border: 2px solid #e17055;
 }
 
+/* Mục đích hiển thị đáp án */
+QLabel#cell[status="answer"] {
+    background-color: #f97316;
+    color: white;
+    border: 2px solid #c2410c;
+}
+
 /* ===== RÀNG BUỘC ===== */
 QLabel#constraint {
     color: #7f8c8d;
@@ -75,6 +82,7 @@ QLabel#infoLabel {
 
 /* ===== BUTTONS ===== */
 QPushButton {
+    outline: None;
     border: none;
     padding: 10px 20px;
     border-radius: 10px;
@@ -183,15 +191,15 @@ QSlider::handle:horizontal:hover {
     background: #732d91;
 }
 
-/* ===== LOAD DATA BUTTON ===== */
-QPushButton#loadDataBtn {
+/* ===== SHOW RESULT BUTTON ===== */
+QPushButton#showResultBtn {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e67e22, stop:1 #d35400);
     color: white;
     border-radius: 8px;
     padding: 8px 15px;
 }
 
-QPushButton#loadDataBtn:hover {
+QPushButton#showResultBtn:hover {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e63e22, stop:1 #e63a61);
 }
 

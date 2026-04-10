@@ -1,5 +1,5 @@
 """
-Backward Chaining solver – SLD Resolution (Prolog-like interpreter).
+Backward Chaining solver - SLD Resolution (Prolog-like interpreter).
 
 Kiến trúc:
     KB (Knowledge Base):

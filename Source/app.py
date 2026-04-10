@@ -2,10 +2,11 @@ import sys
 import os
 import threading
 import json
+import time
 
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
-    QLabel, QComboBox, QPushButton, QFrame, QScrollArea, 
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QLabel, QComboBox, QPushButton, QFrame, QScrollArea,
     QGroupBox, QSlider, QMessageBox, QListWidget
 )
 from PyQt5.QtWidgets import QSizePolicy
@@ -42,6 +43,11 @@ class LoadingOverlay(QWidget):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setVisible(False)
+        self.message = "⚡ Solving..."
+
+    def set_message(self, msg):
+        self.message = msg
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -52,8 +58,8 @@ class LoadingOverlay(QWidget):
 
         # box giữa
         box_rect = self.rect().adjusted(
-            self.width()//3, self.height()//3,
-            -self.width()//3, -self.height()//3
+            self.width()//4, self.height()//3,
+            -self.width()//4, -self.height()//3
         )
 
         painter.setBrush(QColor(255, 255, 255, 230))
@@ -62,8 +68,8 @@ class LoadingOverlay(QWidget):
 
         # text
         painter.setPen(QPen(QColor("#8e44ad")))
-        painter.setFont(QFont("Segoe UI", 18, QFont.Bold))
-        painter.drawText(box_rect, Qt.AlignCenter, "⚡ Solving...")
+        painter.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        painter.drawText(box_rect, Qt.AlignCenter | Qt.TextWordWrap, self.message)
 
     def resize_to_parent(self):
         if self.parent():
@@ -85,6 +91,10 @@ class App(QWidget):
         self.auto_timer.timeout.connect(self.auto_step)
         self.is_auto_running = False
 
+        # Lưu answer từ JSON
+        self.answer_data = None
+        self.showing_answer = False
+
         self._build_ui()
         self._load_puzzles()
 
@@ -103,13 +113,15 @@ class App(QWidget):
         
         self.puzzle_box = QComboBox()
         self.algo_box = QComboBox()
+        self.algo_box.addItem("ALL SOLVER")
         self.algo_box.addItems([name for name, _ in SOLVERS])
+        self.algo_box.setCurrentIndex(1)
         self.load_btn = QPushButton("Reset Map")
         self.load_btn.setObjectName("loadBtn")
         self.run_btn = QPushButton("Solve")
         self.run_btn.setObjectName("solveBtn")
-        self.load_data_btn = QPushButton("Load Data")
-        self.load_data_btn.setObjectName("loadDataBtn")
+        self.load_data_btn = QPushButton("Show Result")
+        self.load_data_btn.setObjectName("showResultBtn")
         
         t_layout.addWidget(QLabel("Puzzle:"))
         t_layout.addWidget(self.puzzle_box)
@@ -120,6 +132,16 @@ class App(QWidget):
         t_layout.addWidget(self.load_data_btn)
         t_layout.addWidget(self.run_btn)
         left_side.addWidget(toolbar)
+
+        # --- LABEL THÔNG BÁO BATCH MODE ---
+        self.lbl_batch_status = QLabel("")
+        self.lbl_batch_status.setStyleSheet(
+            "color: #e74c3c; font-weight: bold; font-size: 16px;"
+        )
+        self.lbl_batch_status.setAlignment(Qt.AlignCenter)
+        self.lbl_batch_status.setVisible(False)
+        left_side.addWidget(self.lbl_batch_status)
+        # ---------------------------------
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setObjectName("gridScrollArea")
@@ -146,6 +168,7 @@ class App(QWidget):
         
         # Status Bar phía dưới cùng bên trái
         self.status_bar = QLabel("Ready.")
+        self.status_bar.setStyleSheet("font-size: 20px; color: #7f8c8d;")
         left_side.addWidget(self.status_bar)
         
         # --- BÊN PHẢI: INFO PANEL ---
@@ -212,7 +235,8 @@ class App(QWidget):
         # Event connections
         self.puzzle_box.currentIndexChanged.connect(self.load_selected_puzzle)
         self.load_btn.clicked.connect(self.reload_input)
-        self.load_data_btn.clicked.connect(self.load_data_from_json)
+        self.load_data_btn.pressed.connect(self.show_answer)
+        self.load_data_btn.released.connect(self.hide_answer)
         self.run_btn.clicked.connect(self.run_solver)
         self.stats_btn.clicked.connect(self.show_stats)
         self.step_list.currentRowChanged.connect(self.go_to_step)
@@ -220,26 +244,56 @@ class App(QWidget):
         self.btn_auto_stop.clicked.connect(self.toggle_pause)
         self.speed_slider.valueChanged.connect(self.update_speed)
 
+    def set_ui_locked(self, locked):
+        self.puzzle_box.setDisabled(locked)
+        self.algo_box.setDisabled(locked)
+        self.load_btn.setDisabled(locked)
+        self.load_data_btn.setDisabled(locked)
+        self.run_btn.setDisabled(locked)
+        self.stats_btn.setDisabled(locked)
+        self.set_visualize_controls_enabled(not locked)
+
     def _load_puzzles(self):
-        if not os.path.exists(INPUT_DIR): return
-        self.puzzles = load_all_puzzles(INPUT_DIR)
-        self.puzzle_box.clear()
-        for p in self.puzzles:
-            self.puzzle_box.addItem(f"{p['id']} ({p['size']}x{p['size']})")
-        if self.puzzles: self.load_selected_puzzle()
+        try:
+            if not os.path.exists(INPUT_DIR): return
+
+            self.puzzles = load_all_puzzles(INPUT_DIR)
+            self.puzzle_box.clear()
+
+            self.puzzle_box.addItem("ALL INPUT")
+            for p in self.puzzles:
+                self.puzzle_box.addItem(f"{p['id']} ({p['size']}x{p['size']})")
+
+            if len(self.puzzles) > 0:
+                    # Đặt mặc định là Input đầu tiên (Index 1 vì Index 0 là ALL INPUT)
+                    self.puzzle_box.setCurrentIndex(1) 
+                    self.load_selected_puzzle()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not load puzzles: {e}")
 
     def load_selected_puzzle(self):
         idx = self.puzzle_box.currentIndex()
+        
         if idx < 0: return
-        self.puzzle = self.puzzles[idx]
+        elif idx == 0:
+            self.status_bar.setText("Ready for ALL INPUT batch run.")
+            return
+            
+        real_idx = idx - 1
+        if real_idx < 0: return
+        
+        self.puzzle = self.puzzles  [real_idx]
         self.current_steps = []
         self.step_list.clear()
         self.stop_auto_run()
+        
+        self.answer_data = None
+
         self.draw_grid()
         self.status_bar.setText(f"Loaded {self.puzzle['id']}")
         self.result_info.setText("Ready to solve.")
 
-    # ------ Hiển thị list steps ------
+    # ================== Hiển thị list step ==================
     def populate_step_list(self):
         self.step_list.clear()
         if not self.current_steps: return
@@ -256,54 +310,102 @@ class App(QWidget):
                 
             self.step_list.addItem(f"Step {i+1}: {act_str} '{val}' at ({r},{c})")
 
-    # ------ Đọc JSON từ Outputs\ ------
-    def load_data_from_json(self):
-        if not self.puzzle: return
-        
-        # Chuyển input_XX thành output_XX
-        input_id = self.puzzle['id']
-        output_filename = input_id.replace("input_", "output_") + ".json"
-        json_path = os.path.join(OUTPUT_DIR, output_filename)
-
-        if not os.path.exists(json_path):
-            QMessageBox.warning(self, "Not Found", f"Cannot find saved data at:\n{json_path}")
+    # ================= Load answer từ input =================
+    def load_answer_data(self):
+        if not self.puzzle:
             return
-
+        
+        input_id = self.puzzle['id']
+        input_filename = input_id + ".json"
+        json_path = os.path.join(INPUT_DIR, input_filename)
+        
+        # Kiểm tra file có tồn tại không
+        if not os.path.exists(json_path):
+            QMessageBox.warning(self, "Not Found", f"Cannot find input file at:\n{json_path}")
+            return
+        
+        # Thử đọc file JSON
         try:
             with open(json_path, 'r') as f:
                 data = json.load(f)
-
-            algo_name = self.algo_box.currentText()
-            if algo_name not in data.get("algorithms", {}):
-                QMessageBox.warning(self, "No Data", f"No data found for {algo_name} in JSON file.")
-                return
-
-            r = data["algorithms"][algo_name]
-
-            # Cập nhật steps và UI
-            self.current_steps = r.get("steps", [])
-            self.populate_step_list()
-
-            status_txt = "Solved" if r['status'] == 1 else "Failed/Timeout"
-            mem = f"{r['memory_kb']} KB" if r.get('memory_kb') is not None else "N/A"
-
-            info = (f"<b>[LOADED FROM JSON]</b><br>"
-                    f"<b>Algorithm:</b> {algo_name}<br>"
-                    f"<b>Status:</b> {status_txt}<br>"
-                    f"<b>Time:</b> {r.get('time_ms', 0):.2f} ms<br>"
-                    f"<b>Memory:</b> {mem}<br>"
-                    f"<b>Inferences:</b> {r.get('inferences', 0)}<br>"
-                    f"<b>Total Steps:</b> {len(self.current_steps)}")
             
-            self.result_info.setText(info)
-            self.status_bar.setText(f"Loaded from JSON for {algo_name}")
-
-            # Tự động nhảy tới step cuối cùng để hiển thị kết quả
-            if self.current_steps:
-                self.step_list.setCurrentRow(len(self.current_steps) - 1)
+            # Lấy mảng "answer" từ JSON
+            self.answer_data = data.get("answer")
+            
+            if not self.answer_data:
+                QMessageBox.warning(self, "No Answer", "No 'answer' field found in input JSON file.")
+                self.answer_data = None
+                return
+            
+            self.status_bar.setText(f"Answer loaded for {input_id}")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to parse JSON:\n{e}")
+            self.answer_data = None
+    
+    def show_answer(self):
+        if not self.puzzle:
+            return
+        
+        if not self.answer_data:
+            self.load_answer_data()
+            if not self.answer_data:
+                return
+        
+        # Đánh dấu là đang hiển thị answer
+        self.showing_answer = True
+        self.status_bar.setText("🔍 Showing answer...")
+        initial_grid = self.puzzle["grid"]
+        
+        # Loop qua tất cả các cell
+        for cell in self.cells:
+            # Nếu là Given thì bỏ qua
+            if initial_grid[cell.r][cell.c] != 0:
+                continue
+            
+            # Với ô trống (giá trị = 0), lấy đáp án
+            answer_val = self.answer_data[cell.r][cell.c]
+            
+            # Ghi giá trị lên cell
+            cell.setText(str(answer_val))
+            
+            # Đổi status thành "answer" (xanh lam)
+            cell.setProperty("status", "answer")
+        
+        # Cập nhật giao diện
+        for cell in self.cells:
+            cell.style().unpolish(cell)
+            cell.style().polish(cell)
+
+    def hide_answer(self):
+        if not self.showing_answer:
+            return
+        
+        # Đánh dấu là không hiển thị answer nữa
+        self.showing_answer = False
+        self.status_bar.setText("Answer hidden.")
+
+        current_row = self.step_list.currentRow()
+        # KIỂM TRA: Nếu đã chạy giải thuật (có steps) và đang chọn 1 step nào đó
+        if self.current_steps and current_row >= 0:
+            # Khôi phục lại đúng trạng thái của step đó
+            self.go_to_step(current_row)
+        else:
+            # Nếu chưa chạy giải thuật (chưa bấm Solve), thì mới xóa về lưới trống
+            initial_grid = self.puzzle["grid"]
+            for cell in self.cells:
+                if initial_grid[cell.r][cell.c] == 0:
+                    cell.setText("")
+                    cell.setProperty("status", "")
+                else:
+                    cell.setProperty("status", "given")
+        
+        # Cập nhật giao diện
+        for cell in self.cells:
+            cell.style().unpolish(cell)
+            cell.style().polish(cell)
+
+    # ========================================================
 
     def reload_input(self):
         self.load_selected_puzzle()
@@ -346,15 +448,89 @@ class App(QWidget):
         self.overlay.resize_to_parent()
 
     def run_solver(self):
-        if self.solving or not self.puzzle: return
+        if self.solving: return
         
-        algo_name = self.algo_box.currentText()
-        SolverClass = dict(SOLVERS)[algo_name]
+        p_idx = self.puzzle_box.currentIndex()
+        s_idx = self.algo_box.currentIndex()
 
+        self.batch_tasks = []
+        
+        # Nhận diện TH chạy
+        if p_idx == 0 and s_idx != 0: self.run_mode = "all_input"
+        elif p_idx != 0 and s_idx == 0: self.run_mode = "all_solver"
+        elif p_idx == 0 and s_idx == 0: self.run_mode = "all_all"
+        else: self.run_mode = "single"
+
+        # Phân tích 4 trường hợp:
+        # Nếu == 0 (ALL), chạy từ 1 đến hết. Nếu != 0 (1 cái), chỉ chạy đúng index đó.
+        puzzles_to_run = range(1, len(self.puzzles) + 1) if p_idx == 0 else [p_idx]
+        solvers_to_run = range(1, len(SOLVERS) + 1) if s_idx == 0 else [s_idx]
+
+        for p in puzzles_to_run:
+            for s in solvers_to_run:
+                self.batch_tasks.append((p, s))
+
+        self.is_batch_mode = len(self.batch_tasks) > 1
+        # Khóa cứng UI
+        self.set_ui_locked(True)
+
+        if self.is_batch_mode:
+            self.lbl_batch_status.setVisible(True)
+            self.run_next_batch_task()
+        else:
+            self.lbl_batch_status.setVisible(False)
+            self.run_single_task(p_idx, s_idx)
+
+    def run_next_batch_task(self):
+        if not self.batch_tasks:
+            # Đã chạy xong toàn bộ (Hết Queue)
+            self.is_batch_mode = False
+            self.lbl_batch_status.setVisible(False)
+            self.status_bar.setText("Batch execution finished.")
+            self.overlay.setVisible(False)
+            self.run_btn.setEnabled(True)
+            self.solving = False
+            
+            # Mở khóa lại UI
+            self.set_ui_locked(False)
+            return
+
+        p_idx, s_idx = self.batch_tasks.pop(0)
+        
+        # Cập nhật UI để load puzzle mới (Tạm tắt tín hiệu để tránh load 2 lần)
+        self.puzzle_box.blockSignals(True)
+        self.puzzle_box.setCurrentIndex(p_idx)
+        self.puzzle_box.blockSignals(False)
+        self.load_selected_puzzle()
+        self.algo_box.setCurrentIndex(s_idx)
+
+        self.run_single_task(p_idx, s_idx)
+
+    def run_single_task(self, p_idx, s_idx):
         self.solving = True
-        self.run_btn.setEnabled(False)
-        self.status_bar.setText(f"Solving with {algo_name}...")
+        
+        puzzle = self.puzzles[p_idx - 1]
+        solver_name, SolverClass = SOLVERS[s_idx - 1]
 
+        total_p = len(self.puzzles)
+        total_s = len(SOLVERS)
+
+        # Format Text thông báo theo 4 trường hợp
+        if self.run_mode == "all_input":
+            msg = f"{solver_name}\n⚡ Solving input {puzzle['id']} ({p_idx}/{total_p})..."
+        elif self.run_mode == "all_solver":
+            msg = f"INPUT {puzzle['id']}\n⚡ Solving {solver_name}... ({s_idx}/{total_s})"
+        elif self.run_mode == "all_all":
+            msg = f"⚡ Running all Experiments...\nInput: {puzzle['id']} ({p_idx}/{total_p}) - Solver: {solver_name} ({s_idx}/{total_s})"
+        else:
+            msg = f"⚡ Solving with {solver_name}..."
+
+
+        if self.is_batch_mode:
+            self.lbl_batch_status.setText(msg.replace('\n', ' - ').replace('⚡ ', ''))
+
+        self.status_bar.setText(f"Solving with {solver_name}...")
+        self.overlay.set_message(msg)
         self.overlay.resize_to_parent()
         self.overlay.setVisible(True)
 
@@ -362,16 +538,31 @@ class App(QWidget):
         signals.finished.connect(self._on_solve_finished)
         signals.error.connect(self._on_solve_error)
 
+        # Lưu lại thời gian bắt đầu để tính delay 1s
+        self.solve_start_time = time.time()
+
         def worker():
             try:
-                r = _run_with_timeout(SolverClass, self.puzzle)
-                signals.finished.emit({algo_name: r})
+                r = _run_with_timeout(SolverClass, puzzle)
+                save_output(puzzle['id'], puzzle['size'], r.get('solution'), {solver_name: r})   # ghi data
+                signals.finished.emit({solver_name: r})
             except Exception as e:
                 signals.error.emit(str(e))
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_solve_finished(self, results):
+        # Tính toán thời gian đã trôi qua
+        elapsed = time.time() - self.solve_start_time
+        
+        # Nếu giải quá nhanh (<1s), bắt app chờ phần thời gian còn thiếu
+        if elapsed < 1:
+            delay_ms = int((1 - elapsed) * 1000)
+            QTimer.singleShot(delay_ms, lambda: self._process_solve_results(results))
+        else:
+            self._process_solve_results(results)
+
+    def _process_solve_results(self, results):
         self.solving = False
         self.run_btn.setEnabled(True)
         self.overlay.setVisible(False)
@@ -404,6 +595,19 @@ class App(QWidget):
         
         if r['status'] == STATUS_SOLVED and r.get('solution'):
             self._apply_solution_to_ui(r['solution'])
+        
+        if self.is_batch_mode:
+            # Nhảy tới step cuối cùng để hiển thị đáp án giải được
+            if self.current_steps:
+                self.step_list.setCurrentRow(len(self.current_steps) - 1)
+            
+            # Đợi 2000ms (2s) rồi bốc Task tiếp theo trong Queue ra chạy
+            QTimer.singleShot(2000, self.run_next_batch_task)
+        else:
+            # Nếu chạy đơn lẻ, mở khóa UI bình thường
+            self.solving = False
+            self.overlay.setVisible(False)
+            self.set_ui_locked(False)
 
     def _apply_solution_to_ui(self, solution):
         for cell in self.cells:
@@ -538,11 +742,24 @@ class App(QWidget):
             # Đã tới step cuối -> tự động tắt Auto Run
             self.stop_auto_run()
 
+    # ========================================================
+
     def _on_solve_error(self, msg):
         self.solving = False
         self.run_btn.setEnabled(True)
         self.overlay.setVisible(False)
+        self.set_ui_locked(False)
         self.status_bar.setText(f"Error: {msg}")
+
+    def set_visualize_controls_enabled(self, enabled):
+        self.step_list.setEnabled(enabled)
+        self.speed_slider.setEnabled(enabled)
+        self.btn_auto_run.setEnabled(enabled)
+        if hasattr(self, 'btn_show_result'):
+            self.btn_show_result.setEnabled(enabled)
+        
+        if not enabled:
+            self.btn_auto_stop.setEnabled(False)
 
     def show_stats(self):
         try:

@@ -45,7 +45,6 @@ INPUT_DIR = os.path.join(os.path.dirname(__file__), "Inputs")
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
 def _status_label(status) -> str:
     if status is None:                return "Skipped"
     if status == STATUS_SOLVED:       return "Solved"
@@ -128,7 +127,6 @@ def _run_with_timeout(SolverClass, puzzle) -> dict:
 # ---------------------------------------------------------------------------
 # Chạy 1 puzzle
 # ---------------------------------------------------------------------------
-
 def run_puzzle(puzzle: dict, verbose: bool = True) -> tuple:
     """
     Chạy tất cả solvers trên 1 puzzle.
@@ -168,7 +166,6 @@ def run_puzzle(puzzle: dict, verbose: bool = True) -> tuple:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-
 def main():
     print("=" * 50)
     print("  Futoshiki Solver")
