@@ -18,7 +18,7 @@ GIVEN_RATIO = {
     5: 0.36,
     6: 0.30,
     7: 0.25,
-    9: 0.20,
+    9: 0.30,
 }
 
 # Số lượng inequality constraints theo size

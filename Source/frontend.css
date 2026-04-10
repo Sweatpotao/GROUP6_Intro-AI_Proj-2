@@ -238,10 +238,10 @@ QPushButton#runAutoBtn[state="end"]:hover { background-color: #c0392b; }
 
 /* STOP state */
 QPushButton#stopAutoBtn[state="stop"] {
-    background-color: #8d46ab;
+    background-color: #ab468d;
     color: white;
 }
-QPushButton#stopAutoBtn[state="stop"]:hover { background-color: #732D91; }
+QPushButton#stopAutoBtn[state="stop"]:hover { background-color: #912d84; }
 
 /* RESUME state */
 QPushButton#stopAutoBtn[state="resume"] {
