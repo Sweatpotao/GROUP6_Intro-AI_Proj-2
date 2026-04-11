@@ -1,4 +1,4 @@
-# Project 02 - Futoshiki
+# Project 02 - Futoshiki Solver
 ### CSC14003 - Fundamentals of Artificial Intelligence
 
 Solving Futoshiki puzzles using First-Order Logic & Inference Algorithms.
@@ -45,7 +45,7 @@ Source/
 |       +-- brute_force.py       Brute force (no pruning, baseline)
 |
 |-- main.py                      Console: run all solvers -> output + log
-|-- generate_inputs.py           Console: generate 10/20/50 input files
+|-- generate_input.py            Console: generate 5/10/20/30 input files
 |-- visualize_stats.py           Matplotlib: read outputs -> charts & table
 |-- app.py                       PyQt5 UI: control panel for all features
 |-- frontend.css                 Stylesheet for app.py
@@ -72,21 +72,38 @@ Source/
 {
   "id":            "input_01",
   "size":          4,
-  "grid":          [[2, 0, 0, 0],
-                    [0, 0, 0, 4],
-                    ...],
-  "h_constraints": [[1, 0, -1],
-                    ...],
-  "v_constraints": [[0, -1, 0, 0],
-                    ...]
+  "grid": [
+    [0, 2, 0, 4],
+    [0, 0, 3, 0],
+    [0, 0, 0, 0],
+    [2, 1, 4, 0]
+  ],
+  "h_constraints": [
+    [-1, 0,  0],
+    [ 1,-1, -1],
+    [ 0, 0,  0],
+    [ 0, 1, -1]
+  ],
+  "v_constraints": [
+    [ 0, 1,  0, -1],
+    [ 0,-1, -1,  0],
+    [-1, 0,  0,  1]
+  ],
+  "answer": [
+    [3, 2, 1, 4],
+    [1, 4, 3, 2],
+    [4, 3, 2, 1],
+    [2, 1, 4, 3]
+  ]
 }
 ```
 
-| Field | Value |
+| Field | Description |
 |---|---|
 | `grid` | N x N — `0` = empty, `1..N` = pre-filled |
-| `h_constraints` | N x (N-1) — `1` = `<`, `-1` = `>`, `0` = none |
-| `v_constraints` | (N-1) x N — `1` = `<`, `-1` = `>`, `0` = none |
+| `h_constraints` | N x (N-1) — `1` = `<` (left < right), `-1` = `>` (left > right), `0` = none |
+| `v_constraints` | (N-1) x N — `1` = `<` (top < bottom), `-1` = `>` (top > bottom), `0` = none |
+| `answer` | Known valid solution (used for verification, not exposed to solvers) |
 
 ---
 
@@ -127,10 +144,13 @@ Source/
 > Skip if `Inputs/` already has files.
 
 ```bash
-python generate_inputs.py
+python generate_input.py
 ```
 
-Choose 10, 20, or 50 inputs. Sizes: 4x4, 5x5, 6x6, 7x7, 9x9 (distributed evenly).
+- Choose **5, 10, 20, or 30** inputs.
+- Sizes: 4x4, 5x5, 6x6, 7x7, 9x9 (distributed evenly).
+- Old input and output files are automatically cleaned up before generation.
+- Each puzzle is verified to have a **unique solution** before saving.
 
 ---
 
@@ -141,6 +161,7 @@ python main.py
 
 - Outputs saved to: `Outputs/output_XX.json`
 - Summary saved to: `Outputs/log.json`
+- Timeout per solver: **10 seconds** (configurable in `core/config.py`)
 
 ---
 
@@ -151,10 +172,12 @@ python app.py
 
 | Button | Action |
 |---|---|
-| **Load** | Read result from existing `output_XX.json` (fast) |
+| **Load** | Read result from existing `output_XX.json` (fast, no computation) |
 | **Run** | Execute solver directly in background thread |
 | **View Stats** | Open comparison charts (requires output files) |
-| **Show Result / Visualize** | Replay step-by-step animation |
+| **Show Result / Visualize** | Replay step-by-step animation with speed control |
+
+> Switching puzzles or closing the window automatically stops any active simulation.
 
 ---
 
@@ -166,6 +189,13 @@ python visualize_stats.py
 ```
 
 Reads all `output_XX.json` files. Saves chart to `Outputs/comparison.png`.
+
+Charts included:
+- Summary table (status per algorithm per puzzle)
+- Time (ms) per puzzle — log scale bar chart
+- Inferences per puzzle — log scale bar chart
+- Average time by puzzle size — line chart
+- Status count per algorithm — stacked bar chart
 
 ---
 
@@ -187,12 +217,14 @@ Reads all `output_XX.json` files. Saves chart to `Outputs/comparison.png`.
 
 ```python
 MAX_STEPS  = 10_000   # Max steps stored per solver (caps memory usage)
-TIME_LIM   = 15       # Timeout per solver in seconds
+TIME_LIM   = 10       # Timeout per solver in seconds
 
 STATUS_UNSOLVABLE = 0
 STATUS_SOLVED     = 1
 STATUS_TIMEOUT    = 2
 STATUS_STEP_LIMIT = 3
+
+VALID_SIZES = [4, 5, 6, 7, 9]
 ```
 
 ---
@@ -203,3 +235,4 @@ STATUS_STEP_LIMIT = 3
 - A* H3 is theoretically optimal but slower than H2 on large puzzles due to the overhead of running AC-3 at every node expansion.
 - `steps[]` in output files can be replayed in `app.py` (Show Result / Visualize).
 - `Inputs/` and `Outputs/` (except sample files) are excluded from git via `.gitignore`.
+- `generate_input.py` guarantees **unique solution** for every generated puzzle (verified by a backtracking solver limited to 2 solutions).

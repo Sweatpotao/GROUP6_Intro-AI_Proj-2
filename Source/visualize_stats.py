@@ -79,7 +79,7 @@ def _get_status(algo_result: dict):
     return None
 
 
-def extract(outputs: list) -> tuple:
+def extract(outputs: list, run_mode: str = "all_all") -> tuple:
     """
     Trích xuất dữ liệu từ list output dicts.
 
@@ -90,6 +90,11 @@ def extract(outputs: list) -> tuple:
     """
     if not outputs:
         return [], [], []
+    
+    # Với all_input hoặc all_all: lấy tất cả file
+    # Với all_solver: chỉ lấy file đầu tiên (1 input duy nhất)
+    if run_mode == "all_solver":
+        outputs = outputs[:1]
 
     # Lấy danh sách algorithm từ file đầu tiên có data
     algos = []
@@ -99,7 +104,7 @@ def extract(outputs: list) -> tuple:
             algos = keys
             break
 
-    # Chuẩn hóa về cùng format với log.json cũ
+    # Chuẩn hóa về cùng format với log.json
     results = []
     for out in outputs:
         results.append({
@@ -293,9 +298,64 @@ def _draw_status_chart(ax, algos, results):
 # Main draw function
 # ---------------------------------------------------------------------------
 
-def show(save: bool = True):
+# ALL INPUT - 1 SOLVER: thẻ tóm tắt thay cho bảng
+def _draw_summary_card_1solver(ax, algo, results):
+    ax.axis("off")
+    total = len(results)
+    solved = unsolvable = timeout = step_limit = 0
+    for r in results:
+        st = _get_status(r["algorithms"].get(algo, {}))
+        if st == STATUS_SOLVED:       solved     += 1
+        elif st == STATUS_UNSOLVABLE: unsolvable += 1
+        elif st == STATUS_TIMEOUT:    timeout    += 1
+        elif st == STATUS_STEP_LIMIT: step_limit += 1
+
+    text = (
+        f"Succeed rate: {solved}/{total}\n\n"
+        f"  Solved input(s)      : {solved}\n"
+        f"  Unsolvable input(s)  : {unsolvable}\n"
+        f"  Timeout input(s)     : {timeout}\n"
+        f"  Step-limit input(s)  : {step_limit}"
+    )
+    ax.set_title(f"Summary — Algorithm: {algo}", fontsize=15, fontweight="bold", pad=22)
+    ax.text(0.5, 0.40, text, ha="center", va="center",
+            fontsize=14, fontweight="bold", fontfamily="monospace",
+            transform=ax.transAxes,
+            bbox=dict(boxstyle="round,pad=1.2", facecolor="#f8f9fa",
+                      edgecolor="#bdc3c7", linewidth=1.5))
+
+# 1 INPUT - ALL SOLVER: thẻ tóm tắt thay cho bảng
+def _draw_summary_card_allsolver(ax, algos, results):
+    ax.axis("off")
+    inp  = results[0]["input_id"]
+    size = results[0]["size"]
+    total = len(algos)
+    solved = unsolvable = timeout = step_limit = 0
+    for algo in algos:
+        st = _get_status(results[0]["algorithms"].get(algo, {}))
+        if st == STATUS_SOLVED:       solved     += 1
+        elif st == STATUS_UNSOLVABLE: unsolvable += 1
+        elif st == STATUS_TIMEOUT:    timeout    += 1
+        elif st == STATUS_STEP_LIMIT: step_limit += 1
+
+    text = (
+        f"Difficulty: {solved}/{total} solver(s) solved\n\n"
+        f"  Solved      : {solved}/{total} algorithm(s)\n"
+        f"  Unsolvable  : {unsolvable}/{total} algorithm(s)\n"
+        f"  Timeout     : {timeout}/{total} algorithm(s)\n"
+        f"  Step-limit  : {step_limit}/{total} algorithm(s)"
+    )
+    ax.set_title(f"Summary — Input: {inp}  ({size}×{size})", fontsize=15,
+                 fontweight="bold", pad=22)
+    ax.text(0.5, 0.40, text, ha="center", va="center",
+            fontsize=14, fontweight="bold", fontfamily="monospace",
+            transform=ax.transAxes,
+            bbox=dict(boxstyle="round,pad=1.2", facecolor="#f8f9fa",
+                      edgecolor="#bdc3c7", linewidth=1.5))
+    
+def show(run_mode: str = "all_all", save: bool = True):
     outputs = load_all_outputs()
-    algos, results, sizes = extract(outputs)
+    algos, results, sizes = extract(outputs, run_mode)
 
     if not results:
         print("No results found in log.json.")
@@ -312,9 +372,14 @@ def show(save: bool = True):
 
     gs = GridSpec(3, 2, figure=fig, hspace=0.45, wspace=0.3)
 
-    # Bảng tổng hợp - chiếm cả hàng đầu
-    ax_table = fig.add_subplot(gs[0, :])
-    _draw_table(ax_table, algos, results)
+    # Hàng 1: bảng / thẻ tóm tắt tùy mode
+    ax_top = fig.add_subplot(gs[0, :])
+    if run_mode == "all_input":
+        _draw_summary_card_1solver(ax_top, algos[0], results)
+    elif run_mode == "all_solver":
+        _draw_summary_card_allsolver(ax_top, algos, results)
+    else:           # all_all
+        _draw_table(ax_top, algos, results)
 
     # Biểu đồ thời gian
     ax_time = fig.add_subplot(gs[1, 0])

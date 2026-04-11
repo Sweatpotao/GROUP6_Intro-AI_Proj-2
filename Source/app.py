@@ -3,6 +3,8 @@ import os
 import threading
 import json
 import time
+import gc
+import glob
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -79,7 +81,7 @@ class App(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Futoshiki Solver")
-        self.resize(1100, 960)
+        self.resize(1280, 720)
 
         self.puzzles = []
         self.puzzle = None
@@ -135,9 +137,7 @@ class App(QWidget):
 
         # --- LABEL THÔNG BÁO BATCH MODE ---
         self.lbl_batch_status = QLabel("")
-        self.lbl_batch_status.setStyleSheet(
-            "color: #e74c3c; font-weight: bold; font-size: 16px;"
-        )
+        self.lbl_batch_status.setStyleSheet("color: #e74c3c; font-weight: bold; font-size: 16px;")
         self.lbl_batch_status.setAlignment(Qt.AlignCenter)
         self.lbl_batch_status.setVisible(False)
         left_side.addWidget(self.lbl_batch_status)
@@ -190,6 +190,7 @@ class App(QWidget):
 
         self.stats_btn = QPushButton("View Full Stats")
         self.stats_btn.setObjectName("resultBtn")
+        self.stats_btn.setEnabled(False)
 
         info_layout.addWidget(QLabel("<b>STATISTICS</b>"))
         self.result_info.setFixedHeight(150)
@@ -234,6 +235,8 @@ class App(QWidget):
 
         # Event connections
         self.puzzle_box.currentIndexChanged.connect(self.load_selected_puzzle)
+        self.puzzle_box.currentIndexChanged.connect(self.disable_stats_btn)
+        self.algo_box.currentIndexChanged.connect(self.disable_stats_btn)
         self.load_btn.clicked.connect(self.reload_input)
         self.load_data_btn.pressed.connect(self.show_answer)
         self.load_data_btn.released.connect(self.hide_answer)
@@ -250,8 +253,10 @@ class App(QWidget):
         self.load_btn.setDisabled(locked)
         self.load_data_btn.setDisabled(locked)
         self.run_btn.setDisabled(locked)
-        self.stats_btn.setDisabled(locked)
         self.set_visualize_controls_enabled(not locked)
+    
+    def disable_stats_btn(self):
+        self.stats_btn.setEnabled(False)
 
     def _load_puzzles(self):
         try:
@@ -295,20 +300,36 @@ class App(QWidget):
 
     # ================== Hiển thị list step ==================
     def populate_step_list(self):
-        self.step_list.clear()
-        if not self.current_steps: return
-        
-        for i, step in enumerate(self.current_steps):
-            # Format chuẩn: [r, c, val, action]
-            r, c, val, action = step
-            if action == 0:
-                act_str = "Given"
-            elif action == 1:
-                act_str = "Fill"
-            else:
-                act_str = "Remove"
+        # Khóa UI và Tín hiệu để tối ưu
+        self.step_list.setUpdatesEnabled(False)
+        self.step_list.blockSignals(True)
+
+        try:
+            self.step_list.clear()
+            
+            if not self.current_steps:
+                return # Nhảy xuống finally để mở lại UI
+
+            items = []
+            for i, step in enumerate(self.current_steps):
+                # Format chuẩn: [r, c, val, action]
+                r, c, val, action = step
                 
-            self.step_list.addItem(f"Step {i+1}: {act_str} '{val}' at ({r},{c})")
+                if action == 0:
+                    act_str = "Given"
+                elif action == 1:
+                    act_str = "Fill"
+                else:
+                    act_str = "Remove"
+                    
+                items.append(f"Step {i+1}: {act_str} '{val}' at ({r},{c})")
+
+            self.step_list.addItems(items)
+        finally:
+            # LUÔN unlock giao diện bất kể có lỗi hay không
+            self.step_list.blockSignals(False)
+            self.step_list.setUpdatesEnabled(True)
+            self.step_list.update()
 
     # ================= Load answer từ input =================
     def load_answer_data(self):
@@ -476,6 +497,7 @@ class App(QWidget):
 
         if self.is_batch_mode:
             self.lbl_batch_status.setVisible(True)
+            for f in glob.glob(os.path.join(OUTPUT_DIR, "output_*.json")): os.remove(f)
             self.run_next_batch_task()
         else:
             self.lbl_batch_status.setVisible(False)
@@ -493,6 +515,9 @@ class App(QWidget):
             
             # Mở khóa lại UI
             self.set_ui_locked(False)
+
+            # Mở khóa Visualize
+            self.stats_btn.setEnabled(True)
             return
 
         p_idx, s_idx = self.batch_tasks.pop(0)
@@ -517,7 +542,7 @@ class App(QWidget):
 
         # Format Text thông báo theo 4 trường hợp
         if self.run_mode == "all_input":
-            msg = f"{solver_name}\n⚡ Solving input {puzzle['id']} ({p_idx}/{total_p})..."
+            msg = f"{solver_name}\n⚡ Solving {puzzle['id']} ({p_idx}/{total_p})..."
         elif self.run_mode == "all_solver":
             msg = f"INPUT {puzzle['id']}\n⚡ Solving {solver_name}... ({s_idx}/{total_s})"
         elif self.run_mode == "all_all":
@@ -544,7 +569,20 @@ class App(QWidget):
         def worker():
             try:
                 r = _run_with_timeout(SolverClass, puzzle)
-                save_output(puzzle['id'], puzzle['size'], r.get('solution'), {solver_name: r})   # ghi data
+                
+                # Đọc file cũ nếu có để merge, tránh ghi đè solver khác
+                number   = puzzle['id'].replace("input_", "")
+                out_path = os.path.join(OUTPUT_DIR, f"output_{number}.json")
+                merged   = {}
+                if os.path.exists(out_path):
+                    try:
+                        with open(out_path, "r", encoding="utf-8") as f:
+                            merged = json.load(f).get("algorithms", {})
+                    except Exception:
+                        merged = {}
+                merged[solver_name] = r
+
+                save_output(puzzle['id'], puzzle['size'], r.get('solution'), merged)
                 signals.finished.emit({solver_name: r})
             except Exception as e:
                 signals.error.emit(str(e))
@@ -570,7 +608,41 @@ class App(QWidget):
         algo_name = list(results.keys())[0]
         r = results[algo_name]
 
-        self.current_steps = r.get("steps") or []
+        # 1. Giữ bản sao đầy đủ các bước để lưu vào batch_results (ghi JSON)
+        full_steps = r.get("steps") or []
+        
+        if self.is_batch_mode:
+            p_id = self.puzzle["id"]
+            # Khởi tạo dict nếu chưa có (tránh lỗi crash lần trước)
+            if not hasattr(self, 'batch_results'): self.batch_results = {}
+            if p_id not in self.batch_results:
+                self.batch_results[p_id] = {"input_id": p_id, "size": self.puzzle["size"], "solution": r.get("solution"), "algorithms": {}}
+            
+            # Lưu full kết quả vào bộ nhớ
+            self.batch_results[p_id]["algorithms"][algo_name] = r
+
+        # 2. Xử lý UI ListWidget (Giảm lag)
+        self.step_list.clear() 
+
+        if self.is_batch_mode:
+            # TRƯỜNG HỢP BATCH: Thủ công thêm 1 dòng, không gọi hàm populate_step_list()
+            if full_steps:
+                last_idx = len(full_steps)
+                self.step_list.addItem(f"Step {last_idx} (Final Result)")
+                
+                # Gán current_steps chỉ chứa 1 cái cuối để Grid hiển thị đáp án
+                self.current_steps = [full_steps[-1]]
+                self.step_list.setCurrentRow(0)
+            else:
+                self.current_steps = []
+        else:
+            # TRƯỜNG HỢP LẺ: Chạy bình thường
+            self.current_steps = full_steps
+            if self.current_steps:
+                self.populate_step_list()
+                self.step_list.setCurrentRow(len(self.current_steps) - 1)
+
+        # 3. Hiện thông số
         status_txt = {
             STATUS_SOLVED: "Solved", 
             STATUS_TIMEOUT: "Timeout", 
@@ -579,35 +651,33 @@ class App(QWidget):
         }.get(r['status'], "Unknown")
 
         mem = f"{r['memory_kb']:.1f} KB" if r.get('memory_kb') is not None else "N/A"
+        
+        # Chỗ này hiện số bước thực tế (vd: 20000) để theo dõi
+        total_display = len(full_steps)
+        if self.is_batch_mode and total_display > 1:
+            total_display = f"{total_display}"
 
         info = (f"<b>Algorithm:</b> {algo_name}<br>"
                 f"<b>Status:</b> {status_txt}<br>"
                 f"<b>Time:</b> {r['time_ms']:.2f} ms<br>"
                 f"<b>Memory:</b> {mem}<br>"
                 f"<b>Inferences:</b> {r.get('inferences', 0)}<br>"
-                f"<b>Total Steps:</b> {len(self.current_steps)}")
+                f"<b>Total Steps:</b> {total_display}")
+        
         self.result_info.setText(info)
         self.status_bar.setText(f"Finished: {status_txt}")
 
-        if self.current_steps:
-            self.populate_step_list()
-            self.step_list.setCurrentRow(len(self.current_steps) - 1)
-        
         if r['status'] == STATUS_SOLVED and r.get('solution'):
             self._apply_solution_to_ui(r['solution'])
         
+        # 4. Điều hướng Batch tiếp theo
         if self.is_batch_mode:
-            # Nhảy tới step cuối cùng để hiển thị đáp án giải được
-            if self.current_steps:
-                self.step_list.setCurrentRow(len(self.current_steps) - 1)
-            
-            # Đợi 2000ms (2s) rồi bốc Task tiếp theo trong Queue ra chạy
             QTimer.singleShot(2000, self.run_next_batch_task)
         else:
-            # Nếu chạy đơn lẻ, mở khóa UI bình thường
-            self.solving = False
-            self.overlay.setVisible(False)
             self.set_ui_locked(False)
+
+        # 5. Dọn rác (dọn temp-value nằm trong RAM)
+        gc.collect()
 
     def _apply_solution_to_ui(self, solution):
         for cell in self.cells:
@@ -762,9 +832,12 @@ class App(QWidget):
             self.btn_auto_stop.setEnabled(False)
 
     def show_stats(self):
+        mode = getattr(self, "run_mode", "all_all")
         try:
+            import importlib
             import visualize_stats
-            visualize_stats.show()
+            importlib.reload(visualize_stats)
+            visualize_stats.show(run_mode=mode)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not load stats: {e}")
 
