@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.gridspec import GridSpec
@@ -121,147 +120,37 @@ def extract(outputs: list, run_mode: str = "all_all") -> tuple:
 # Vẽ bảng tổng hợp
 # ---------------------------------------------------------------------------
 
-def _draw_table(ax, algos, results):
-    ax.axis("off")
-    ax.set_title("Summary Table", fontsize=13, fontweight="bold", pad=10)
-
-    # Header
-    col_labels = ["Input", "Size"] + algos
-    n_cols     = len(col_labels)
-    n_rows     = len(results)
-
-    table_data = []
-    cell_colors = []
-
-    for r in results:
-        row    = [r["input_id"], f"{r['size']}x{r['size']}"]
-        colors = ["#f0f0f0", "#f0f0f0"]
-        for algo in algos:
-            ar     = r["algorithms"].get(algo, {})
-            status = _get_status(ar)
-            label  = STATUS_LABEL.get(status, "N/A")
-            row.append(label)
-            colors.append(STATUS_COLOR.get(status, "#bdc3c7") + "88")
-        table_data.append(row)
-        cell_colors.append(colors)
-
-    table = ax.table(
-        cellText    = table_data,
-        colLabels   = col_labels,
-        cellColours = cell_colors,
-        loc         = "center",
-        cellLoc     = "center",
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(8)
-    table.scale(1, 1.4)
-
-    # Style header
-    for j in range(n_cols):
-        table[0, j].set_facecolor("#2c3e50")
-        table[0, j].set_text_props(color="white", fontweight="bold")
-
-
 # ---------------------------------------------------------------------------
-# Biểu đồ thời gian
+# TH: ALL INPUT - ALL SOLVER
 # ---------------------------------------------------------------------------
 
-def _draw_time_chart(ax, algos, results):
-    ax.set_title("Time (ms) per puzzle", fontsize=12, fontweight="bold")
-
-    n        = len(results)
+# Biểu đồ cột - đường biểu diễn steps
+def _draw_steps_all_all(ax, algos, results):
+    n     = len(results)
+    width = 0.8 / max(len(algos), 1)
+    x     = range(n)
     x_labels = [r["input_id"].replace("input_", "#") for r in results]
-    x        = range(n)
-    width    = 0.8 / len(algos)
 
     for idx, (algo, color) in enumerate(zip(algos, ALGO_COLORS)):
-        times = []
+        steps = []
         for r in results:
-            ar = r["algorithms"].get(algo, {})
-            t  = ar.get("time_ms")
-            times.append(t if t is not None else 0)
-
+            ar         = r["algorithms"].get(algo, {})
+            steps_data = ar.get("steps", [])
+            count      = len(steps_data) if isinstance(steps_data, list) else int(steps_data or 0)
+            steps.append(count)
         offset = (idx - len(algos) / 2 + 0.5) * width
-        bars   = ax.bar([xi + offset for xi in x], times, width, label=algo, color=color, alpha=0.85)
+        ax.bar([xi + offset for xi in x], steps, width,
+               label=algo, color=color, alpha=0.7, zorder=3)
 
     ax.set_xticks(list(x))
     ax.set_xticklabels(x_labels, fontsize=8, rotation=30)
-    ax.set_ylabel("ms")
-    ax.set_yscale("log")   # log scale vì brute force >> others
-    ax.legend(fontsize=7, loc="upper left")
-    ax.grid(axis="y", alpha=0.3)
-
-
-# ---------------------------------------------------------------------------
-# Biểu đồ inferences
-# ---------------------------------------------------------------------------
-
-def _draw_inference_chart(ax, algos, results):
-    ax.set_title("Inferences per puzzle", fontsize=12, fontweight="bold")
-
-    n        = len(results)
-    x_labels = [r["input_id"].replace("input_", "#") for r in results]
-    x        = range(n)
-    width    = 0.8 / len(algos)
-
-    for idx, (algo, color) in enumerate(zip(algos, ALGO_COLORS)):
-        infs = []
-        for r in results:
-            ar  = r["algorithms"].get(algo, {})
-            inf = ar.get("inferences")
-            infs.append(inf if inf is not None else 0)
-
-        offset = (idx - len(algos) / 2 + 0.5) * width
-        ax.bar([xi + offset for xi in x], infs, width, label=algo, color=color, alpha=0.85)
-
-    ax.set_xticks(list(x))
-    ax.set_xticklabels(x_labels, fontsize=8, rotation=30)
-    ax.set_ylabel("Inferences")
+    ax.set_title("Step count per Puzzle", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Steps")
     ax.set_yscale("log")
     ax.legend(fontsize=7, loc="upper left")
-    ax.grid(axis="y", alpha=0.3)
+    ax.grid(axis="y", linestyle="--", alpha=0.4, zorder=0)
 
-
-# ---------------------------------------------------------------------------
-# Biểu đồ thời gian theo size (line chart)
-# ---------------------------------------------------------------------------
-
-def _draw_time_by_size(ax, algos, results):
-    ax.set_title("Avg time (ms) by puzzle size", fontsize=12, fontweight="bold")
-
-    # Nhóm theo size
-    size_data = {}
-    for r in results:
-        s = r["size"]
-        if s not in size_data:
-            size_data[s] = {a: [] for a in algos}
-        for algo in algos:
-            ar = r["algorithms"].get(algo, {})
-            t  = ar.get("time_ms")
-            if t is not None:
-                size_data[s][algo].append(t)
-
-    sizes = sorted(size_data.keys())
-
-    for algo, color in zip(algos, ALGO_COLORS):
-        y = []
-        for s in sizes:
-            vals = size_data[s].get(algo, [])
-            y.append(sum(vals) / len(vals) if vals else 0)
-        ax.plot(sizes, y, marker="o", label=algo, color=color, linewidth=1.8)
-
-    ax.set_xticks(sizes)
-    ax.set_xticklabels([f"{s}x{s}" for s in sizes])
-    ax.set_ylabel("Avg ms")
-    ax.set_yscale("log")
-    ax.legend(fontsize=7, loc="upper left")
-    ax.grid(alpha=0.3)
-
-
-# ---------------------------------------------------------------------------
 # Biểu đồ status (stacked bar)
-# ---------------------------------------------------------------------------
-
 def _draw_status_chart(ax, algos, results):
     ax.set_title("Status count per algorithm", fontsize=12, fontweight="bold")
 
@@ -293,6 +182,232 @@ def _draw_status_chart(ax, algos, results):
     ax.legend(fontsize=8)
     ax.grid(axis="y", alpha=0.3)
 
+# Biểu đồ thời gian
+def _draw_time_chart(ax, algos, results):
+    ax.set_title("Execution Time (ms)", fontsize=12, fontweight="bold")
+
+    n        = len(results)
+    x_labels = [r["input_id"].replace("input_", "#") for r in results]
+    x        = range(n)
+    width    = 0.8 / len(algos)
+
+    for idx, (algo, color) in enumerate(zip(algos, ALGO_COLORS)):
+        times = []
+        for r in results:
+            ar = r["algorithms"].get(algo, {})
+            t  = ar.get("time_ms")
+            times.append(t if t is not None else 0)
+
+        offset = (idx - len(algos) / 2 + 0.5) * width
+        bars   = ax.bar([xi + offset for xi in x], times, width, label=algo, color=color, alpha=0.85)
+
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(x_labels, fontsize=8, rotation=30)
+    ax.set_ylabel("ms")
+    ax.set_yscale("log")   # log scale vì brute force >> others
+    ax.legend(fontsize=7, loc="upper left")
+    ax.grid(axis="y", alpha=0.3)
+
+# Biểu đồ inferences
+def _draw_inference_chart(ax, algos, results):
+    ax.set_title("Inferences", fontsize=12, fontweight="bold")
+
+    n        = len(results)
+    x_labels = [r["input_id"].replace("input_", "#") for r in results]
+    x        = range(n)
+    width    = 0.8 / len(algos)
+
+    for idx, (algo, color) in enumerate(zip(algos, ALGO_COLORS)):
+        infs = []
+        for r in results:
+            ar  = r["algorithms"].get(algo, {})
+            inf = ar.get("inferences")
+            infs.append(inf if inf is not None else 0)
+
+        offset = (idx - len(algos) / 2 + 0.5) * width
+        ax.bar([xi + offset for xi in x], infs, width, label=algo, color=color, alpha=0.85)
+
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(x_labels, fontsize=8, rotation=30)
+    ax.set_ylabel("Inferences")
+    ax.set_yscale("log")
+    ax.legend(fontsize=7, loc="upper left")
+    ax.grid(axis="y", alpha=0.3)
+
+# Biểu đồ thời gian theo size (line chart)
+def _draw_time_by_size(ax, algos, results):
+    ax.set_title("Avg Runtime (ms) by Puzzle Size", fontsize=12, fontweight="bold")
+
+    # Nhóm theo size
+    size_data = {}
+    for r in results:
+        s = r["size"]
+        if s not in size_data:
+            size_data[s] = {a: [] for a in algos}
+        for algo in algos:
+            ar = r["algorithms"].get(algo, {})
+            t  = ar.get("time_ms")
+            if t is not None:
+                size_data[s][algo].append(t)
+
+    sizes = sorted(size_data.keys())
+
+    for algo, color in zip(algos, ALGO_COLORS):
+        y = []
+        for s in sizes:
+            vals = size_data[s].get(algo, [])
+            y.append(sum(vals) / len(vals) if vals else 0)
+        ax.plot(sizes, y, marker="o", label=algo, color=color, linewidth=1.8)
+
+    ax.set_xticks(sizes)
+    ax.set_xticklabels([f"{s}x{s}" for s in sizes])
+    ax.set_ylabel("Avg ms")
+    ax.set_yscale("log")
+    ax.legend(fontsize=7, loc="upper left")
+    ax.grid(alpha=0.3)
+
+# Memory chart
+def _draw_memory_chart(ax, algos, results):
+    ax.set_title("Memory Used (KB) per algorithm", fontsize=12, fontweight="bold")
+    x_labels = [r["input_id"].replace("input_", "#") for r in results]
+
+    for algo, color in zip(algos, ALGO_COLORS):
+        mems = [r["algorithms"].get(algo, {}).get("memory_kb") or 0 for r in results]
+        ax.plot(x_labels, mems, marker="o", label=algo,
+                color=color, linewidth=1.8, zorder=3)
+
+    ax.set_ylabel("KB")
+    plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=8)
+    ax.legend(fontsize=7, loc="upper left")
+    ax.grid(linestyle="--", alpha=0.4)
+
+# ---------------------------------------------------------------------------
+# TH: ALL INPUT - 1 SOLVER
+# ---------------------------------------------------------------------------
+
+# fTime line chart theo input
+def _draw_time_line(ax, algos, results):
+    x_labels = [r["input_id"].replace("input_", "#") for r in results]
+    algo     = algos[0]
+    times    = [r["algorithms"].get(algo, {}).get("time_ms") or 0 for r in results]
+
+    ax.plot(x_labels, times, marker="o", color=ALGO_COLORS[0], linewidth=2, markersize=7, zorder=3)
+    # Chú thích giá trị mỗi điểm
+    for i, v in enumerate(times):
+        ax.annotate(f"{v:.1f}", (x_labels[i], times[i]), textcoords="offset points", xytext=(0, 8), ha="center", fontsize=7)
+
+    ax.set_title(f"Execution Time (ms)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("ms")
+    ax.set_yscale("log")
+    plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=8)
+    ax.grid(linestyle="--", alpha=0.4)
+
+
+# Inferences line chart theo input
+def _draw_inferences_line(ax, algos, results):
+    x_labels = [r["input_id"].replace("input_", "#") for r in results]
+    algo     = algos[0]
+    infs     = [r["algorithms"].get(algo, {}).get("inferences") or 0 for r in results]
+
+    ax.plot(x_labels, infs, marker="s", color=ALGO_COLORS[1], linewidth=2, markersize=7, zorder=3)
+    for i, v in enumerate(infs):
+        ax.annotate(f"{int(v)}", (x_labels[i], infs[i]), textcoords="offset points", xytext=(0, 8), ha="center", fontsize=7)
+
+    ax.set_title(f"Inference Count", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Inferences")
+    ax.set_yscale("log")
+    plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=8)
+    ax.grid(linestyle="--", alpha=0.4)
+
+
+# Memory line chart theo input
+def _draw_memory_line(ax, algos, results):
+    x_labels = [r["input_id"].replace("input_", "#") for r in results]
+    algo     = algos[0]
+    mems     = [r["algorithms"].get(algo, {}).get("memory_kb") or 0 for r in results]
+
+    ax.plot(x_labels, mems, marker="^", color=ALGO_COLORS[2], linewidth=2, markersize=7, zorder=3)
+    for i, v in enumerate(mems):
+        ax.annotate(f"{v:.1f}", (x_labels[i], mems[i]), textcoords="offset points", xytext=(0, 8), ha="center", fontsize=7)
+
+    ax.set_title(f"Memory Footprint (KB)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("KB")
+    plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=8)
+    ax.grid(linestyle="--", alpha=0.4)
+
+# ---------------------------------------------------------------------------
+# TH: 1 INPUT - ALL SOLVER
+# ---------------------------------------------------------------------------
+
+# Time per ALGORITHM
+def _draw_time_per_algo(ax, algos, results):
+    r      = results[0]
+    times  = [r["algorithms"].get(a, {}).get("time_ms") or 0 for a in algos]
+    colors = ALGO_COLORS[:len(algos)]
+    bars   = ax.bar(algos, times, color=colors, alpha=0.85, zorder=3)
+    ax.bar_label(bars, fmt="%.1f", fontsize=7, padding=3)
+    ax.set_title("Execution Time (ms)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("ms")
+    ax.set_yscale("log")
+    plt.setp(ax.get_xticklabels(), rotation=20, ha="right", fontsize=8)
+    ax.grid(axis="y", alpha=0.3)
+
+
+# Inferences per ALGORITHM
+def _draw_inferences_per_algo(ax, algos, results):
+    r    = results[0]
+    infs = [r["algorithms"].get(a, {}).get("inferences") or 0 for a in algos]
+    colors = ALGO_COLORS[:len(algos)]
+    bars   = ax.bar(algos, infs, color=colors, alpha=0.85, zorder=3)
+    ax.bar_label(bars, fmt="%d", fontsize=7, padding=3)
+    ax.set_title("Inference Count by Algorithm", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Inferences")
+    ax.set_yscale("log")
+    plt.setp(ax.get_xticklabels(), rotation=20, ha="right", fontsize=8)
+    ax.grid(axis="y", alpha=0.3)
+
+
+# Steps comparison (radar-like horizontal bar)
+def _draw_steps_per_algo(ax, algos, results):
+    r      = results[0]
+    y_vals = []
+    colors = []
+    for algo in algos:
+        ar         = r["algorithms"].get(algo, {})
+        steps_data = ar.get("steps", [])
+        count      = len(steps_data) if isinstance(steps_data, list) else int(steps_data or 0)
+        y_vals.append(count)
+        st = _get_status(ar)
+        colors.append("#27ae60" if st == STATUS_SOLVED else "#e67e22")
+
+    bars = ax.barh(algos, y_vals, color=colors, alpha=0.85, zorder=3)
+    ax.bar_label(bars, fmt="%d", fontsize=8, padding=4)
+    ax.set_title("Step Count by Algorithm", fontsize=12, fontweight="bold")
+    ax.set_xlabel("Steps")
+    ax.set_xscale("log")
+    ax.invert_yaxis()
+
+    # Legend thủ công
+    handles = [
+        mpatches.Patch(color="#27ae60", label="Solved"),
+        mpatches.Patch(color="#e67e22", label="Not solved"),
+    ]
+    ax.legend(handles=handles, fontsize=8, loc="center right")
+    ax.grid(axis="x", linestyle="--", alpha=0.5, zorder=0)
+
+
+# Memory per algorithm (bar)
+def _draw_memory_per_algo(ax, algos, results):
+    r      = results[0]
+    mems   = [r["algorithms"].get(a, {}).get("memory_kb") or 0 for a in algos]
+    colors = ALGO_COLORS[:len(algos)]
+    bars   = ax.bar(algos, mems, color=colors, alpha=0.85, zorder=3)
+    ax.bar_label(bars, fmt="%.1f", fontsize=7, padding=3)
+    ax.set_title("Memory Usage (KB)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("KB")
+    plt.setp(ax.get_xticklabels(), rotation=20, ha="right", fontsize=8)
+    ax.set_yscale("log")
+    ax.grid(axis="y", linestyle="--", alpha=0.5, zorder=0)
 
 # ---------------------------------------------------------------------------
 # Main draw function
@@ -372,35 +487,43 @@ def show(run_mode: str = "all_all", save: bool = True):
 
     gs = GridSpec(3, 2, figure=fig, hspace=0.45, wspace=0.3)
 
-    # Hàng 1: bảng / thẻ tóm tắt tùy mode
-    ax_top = fig.add_subplot(gs[0, :])
+    ax_tl = fig.add_subplot(gs[1, 0])
+    ax_tr = fig.add_subplot(gs[1, 1])
+    ax_bl = fig.add_subplot(gs[2, 0])
+    ax_br = fig.add_subplot(gs[2, 1])
+
+    # Vẽ chart tùy mode
     if run_mode == "all_input":
+        ax_top = fig.add_subplot(gs[0, :])
         _draw_summary_card_1solver(ax_top, algos[0], results)
+        _draw_time_line(ax_tl, algos, results)
+        _draw_inferences_line(ax_tr, algos, results)
+        _draw_time_by_size(ax_bl, algos, results)
+        _draw_memory_line(ax_br, algos, results)
+
     elif run_mode == "all_solver":
+        ax_top = fig.add_subplot(gs[0, :])
         _draw_summary_card_allsolver(ax_top, algos, results)
+        _draw_time_per_algo(ax_tl, algos, results)
+        _draw_inferences_per_algo(ax_tr, algos, results)
+        _draw_steps_per_algo(ax_bl, algos, results)
+        _draw_memory_per_algo(ax_br, algos, results)
+
     else:           # all_all
-        _draw_table(ax_top, algos, results)
-
-    # Biểu đồ thời gian
-    ax_time = fig.add_subplot(gs[1, 0])
-    _draw_time_chart(ax_time, algos, results)
-
-    # Biểu đồ inferences
-    ax_inf = fig.add_subplot(gs[1, 1])
-    _draw_inference_chart(ax_inf, algos, results)
-
-    # Line chart theo size
-    ax_size = fig.add_subplot(gs[2, 0])
-    _draw_time_by_size(ax_size, algos, results)
-
-    # Status stacked bar
-    ax_status = fig.add_subplot(gs[2, 1])
-    _draw_status_chart(ax_status, algos, results)
+        ax_high_l  = fig.add_subplot(gs[0, 0])
+        ax_high_r = fig.add_subplot(gs[0, 1])
+        _draw_status_chart(ax_high_l, algos, results)
+        _draw_steps_all_all(ax_high_r, algos, results)
+        _draw_time_chart(ax_tl, algos, results)
+        _draw_inference_chart(ax_tr, algos, results)
+        _draw_time_by_size(ax_bl, algos, results)
+        _draw_memory_chart(ax_br, algos, results)
 
     if save:
         plt.savefig(OUTPUT_IMG, dpi=150, bbox_inches="tight")
         print(f"Chart saved to: {OUTPUT_IMG}")
 
+    plt.get_current_fig_manager().window.showMaximized()
     plt.show()
     return fig
 

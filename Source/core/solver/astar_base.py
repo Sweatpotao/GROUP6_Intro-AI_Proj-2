@@ -1,7 +1,7 @@
 import heapq
 from abc import abstractmethod
 
-from core.config import ACTION_ASSIGN, ACTION_BACKTRACK
+from core.config import ACTION_ASSIGN
 from core.solver.base_solver import BaseSolver
 
 

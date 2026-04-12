@@ -114,18 +114,18 @@ QPushButton#loadBtn:hover {
 }
 
 QPushButton#resultBtn {
-    background-color: #8e44ad;
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #62bcb6, stop:1 #8e44ad);
     color: white;
     border-radius: 8px;
     padding: 10px 15px;
 }
 
 QPushButton#resultBtn:hover {
-    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #62bcb6, stop:1 #8e44ad);
+    background-color: #8e44ad;
 }
 
 QPushButton#resultBtn:disabled {
-    background-color: #ac89bc;
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #b1ddd9, stop:1 #c6a2d6);
 }
 
 /* ===== COMBOBOX ===== */

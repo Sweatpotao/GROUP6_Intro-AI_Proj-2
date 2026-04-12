@@ -81,7 +81,6 @@ class App(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Futoshiki Solver")
-        self.resize(1280, 720)
 
         self.puzzles = []
         self.puzzle = None
@@ -99,6 +98,8 @@ class App(QWidget):
 
         self._build_ui()
         self._load_puzzles()
+
+        self.showMaximized()
 
     def _build_ui(self):
         main_layout = QHBoxLayout(self)
@@ -836,8 +837,12 @@ class App(QWidget):
         try:
             import importlib
             import visualize_stats
+            self.stats_btn.setDisabled(True)
+            self.stats_btn.setText("Generating...")
             importlib.reload(visualize_stats)
             visualize_stats.show(run_mode=mode)
+            self.stats_btn.setText("View Full Stats")
+            self.stats_btn.setEnabled(True)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not load stats: {e}")
 

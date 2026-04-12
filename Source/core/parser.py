@@ -1,7 +1,6 @@
 import json
 import os
 
-
 def load_puzzle(filepath: str) -> dict:
     # Đọc file input .json và trả về dict chuẩn.
     # Return:

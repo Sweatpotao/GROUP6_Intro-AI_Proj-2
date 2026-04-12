@@ -1,7 +1,7 @@
 import threading
 from abc import ABC, abstractmethod
 
-from core.config import MAX_STEPS, ACTION_GIVEN, ACTION_ASSIGN, ACTION_BACKTRACK, STATUS_SOLVED, STATUS_UNSOLVABLE, STATUS_STEP_LIMIT
+from core.config import MAX_STEPS, ACTION_GIVEN, STATUS_SOLVED, STATUS_UNSOLVABLE, STATUS_STEP_LIMIT
 
 # cLASS CHA CHO CÁC SOLVER
 class BaseSolver(ABC):
