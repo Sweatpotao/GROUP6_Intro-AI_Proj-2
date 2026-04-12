@@ -33,7 +33,7 @@ QLabel#cell {
 QLabel#cell[status="given"] {
     background-color: #f8f9fa;
     color: #2980b9;
-    border: 2px solid #2980b9;
+    border: 3.5px solid #2980b9;
 }
 
 QLabel#cell[status="fill"] {
@@ -96,6 +96,7 @@ QPushButton#solveBtn {
     border-radius: 10px;
     padding: 8px 16px;
     font-weight: bold;
+    font-size: 16px;
 }
 
 QPushButton#solveBtn:hover {
@@ -107,6 +108,7 @@ QPushButton#loadBtn {
     color: white;
     border-radius: 8px;
     padding: 8px 15px;
+    font-size: 16px;
 }
 
 QPushButton#loadBtn:hover {
@@ -118,6 +120,7 @@ QPushButton#resultBtn {
     color: white;
     border-radius: 8px;
     padding: 10px 15px;
+    font-size: 16px;
 }
 
 QPushButton#resultBtn:hover {
@@ -128,6 +131,18 @@ QPushButton#resultBtn:disabled {
     background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #b1ddd9, stop:1 #c6a2d6);
 }
 
+QPushButton#showResultBtn {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e67e22, stop:1 #d35400);
+    color: white;
+    border-radius: 8px;
+    padding: 8px 15px;
+    font-size: 16px;
+}
+
+QPushButton#showResultBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e63e22, stop:1 #e63a61);
+}
+
 /* ===== COMBOBOX ===== */
 QComboBox {
     border: 1px solid #dcdde1;
@@ -135,7 +150,7 @@ QComboBox {
     padding: 8px 12px;
     background-color: white;
     color: #2c3e50;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 500;
 }
 
@@ -166,7 +181,7 @@ QGroupBox {
     margin-top: 8px;
     padding-top: 8px;
     font-weight: bold;
-    font-size: 12px;
+    font-size: 15px;
 }
 
 QGroupBox::title {
@@ -195,18 +210,6 @@ QSlider::handle:horizontal:hover {
     background: #732d91;
 }
 
-/* ===== SHOW RESULT BUTTON ===== */
-QPushButton#showResultBtn {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e67e22, stop:1 #d35400);
-    color: white;
-    border-radius: 8px;
-    padding: 8px 15px;
-}
-
-QPushButton#showResultBtn:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e63e22, stop:1 #e63a61);
-}
-
 /* ===== STEP LIST ===== */
 QListWidget {
     outline: None;
@@ -214,7 +217,7 @@ QListWidget {
     border-radius: 8px;
     padding: 5px;
     background-color: white;
-    font-size: 13px;
+    font-size: 14px;
     color: #2c3e50;
 }
 
@@ -262,7 +265,7 @@ QPushButton#stopAutoBtn[state="resume"] {
 }
 QPushButton#stopAutoBtn[state="resume"]:hover { background-color: #219150; }
 
-/* Khi bị vô hiệu hóa (Disabled) */
+/* Vô hiệu hóa */
 QPushButton#stopAutoBtn:disabled {
     background-color: #bdc3c7;
     color: #ecf0f1;

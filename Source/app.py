@@ -5,6 +5,7 @@ import json
 import time
 import gc
 import glob
+import importlib
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -20,6 +21,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from core.parser  import load_all_puzzles
 from core.logger  import save_output
 from core.config  import STATUS_SOLVED, STATUS_TIMEOUT, STATUS_STEP_LIMIT, STATUS_UNSOLVABLE
+import visualize_stats
 from main         import _run_with_timeout, SOLVERS
 
 INPUT_DIR  = os.path.join(os.path.dirname(__file__), "Inputs")
@@ -176,7 +178,7 @@ class App(QWidget):
         right_side = QVBoxLayout()
         self.info_card = QFrame()
         self.info_card.setObjectName("infoPanel")
-        self.info_card.setFixedWidth(300)
+        self.info_card.setFixedWidth(330)
         
         info_layout = QVBoxLayout(self.info_card)
         self.result_info = QLabel("Ready.")
@@ -673,7 +675,7 @@ class App(QWidget):
         
         # 4. Điều hướng Batch tiếp theo
         if self.is_batch_mode:
-            QTimer.singleShot(2000, self.run_next_batch_task)
+            QTimer.singleShot(1500, self.run_next_batch_task)
         else:
             self.set_ui_locked(False)
 
@@ -835,15 +837,23 @@ class App(QWidget):
     def show_stats(self):
         mode = getattr(self, "run_mode", "all_all")
         try:
-            import importlib
-            import visualize_stats
+            # Khóa btn, đổi text
             self.stats_btn.setDisabled(True)
             self.stats_btn.setText("Generating...")
+            QApplication.processEvents()
+            
+            # Chạy visualize
             importlib.reload(visualize_stats)
             visualize_stats.show(run_mode=mode)
+
+            # Mở btn trở lại
             self.stats_btn.setText("View Full Stats")
             self.stats_btn.setEnabled(True)
         except Exception as e:
+            # Đảm bảo btn được mở lại nếu có lỗi xảy ra
+            self.stats_btn.setText("View Full Stats")
+            self.stats_btn.setEnabled(True)
+
             QMessageBox.critical(self, "Error", f"Could not load stats: {e}")
 
 if __name__ == "__main__":

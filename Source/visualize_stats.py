@@ -152,7 +152,7 @@ def _draw_steps_all_all(ax, algos, results):
 
 # Biểu đồ status (stacked bar)
 def _draw_status_chart(ax, algos, results):
-    ax.set_title("Status count per algorithm", fontsize=12, fontweight="bold")
+    ax.set_title("Status count by algorithm", fontsize=12, fontweight="bold")
 
     status_list = [STATUS_SOLVED, STATUS_TIMEOUT, STATUS_STEP_LIMIT, STATUS_UNSOLVABLE]
     counts      = {s: [] for s in status_list}
