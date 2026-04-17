@@ -24,6 +24,7 @@ from core.solver.astar_h2          import AStarH2
 from core.solver.astar_h3          import AStarH3
 from core.solver.backtracking      import BacktrackingSolver
 from core.solver.brute_force       import BruteForceSolver
+from core.solver.brute_force_opt   import BruteForce_optimized
 
 # ---------------------------------------------------------------------------
 # Cấu hình solvers
@@ -37,6 +38,7 @@ SOLVERS = [
     ("astar_h3",          AStarH3),
     ("backtracking",      BacktrackingSolver),
     ("brute_force",       BruteForceSolver),
+    ("brute_force_opt",   BruteForce_optimized),
 ]
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), "Inputs")

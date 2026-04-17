@@ -26,6 +26,7 @@ from main         import _run_with_timeout, SOLVERS
 
 INPUT_DIR  = os.path.join(os.path.dirname(__file__), "Inputs")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "Outputs")
+SOLVERS = [s for s in SOLVERS if s[0] != "brute_force"]
 
 class SolverSignals(QObject):
     finished = pyqtSignal(dict)
@@ -566,7 +567,7 @@ class App(QWidget):
         signals.finished.connect(self._on_solve_finished)
         signals.error.connect(self._on_solve_error)
 
-        # Lưu lại thời gian bắt đầu để tính delay 1s
+        # Lưu lại thời gian bắt đầu để tính delay 0,75s
         self.solve_start_time = time.time()
 
         def worker():
@@ -596,16 +597,15 @@ class App(QWidget):
         # Tính toán thời gian đã trôi qua
         elapsed = time.time() - self.solve_start_time
         
-        # Nếu giải quá nhanh (<1s), bắt app chờ phần thời gian còn thiếu
+        # Nếu tốc độ giải < 0,75s, delay phần thời gian còn thiếu
         if elapsed < 1:
-            delay_ms = int((1 - elapsed) * 1000)
+            delay_ms = int((1 - elapsed) * 750)
             QTimer.singleShot(delay_ms, lambda: self._process_solve_results(results))
         else:
             self._process_solve_results(results)
 
     def _process_solve_results(self, results):
         self.solving = False
-        self.run_btn.setEnabled(True)
         self.overlay.setVisible(False)
         
         algo_name = list(results.keys())[0]

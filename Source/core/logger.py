@@ -3,8 +3,8 @@ import os
 import re
 from datetime import datetime
 
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "Outputs")
-LOG_FILE   = os.path.join(OUTPUT_DIR, "log.json")
+OUTPUT_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "Outputs"))
+LOG_FILE   = os.path.normpath(os.path.join(OUTPUT_DIR, "log.json"))
 
 # Format cho file json
 def _compact_json(data) -> str:
