@@ -200,7 +200,7 @@ def generate_kb(puzzle: dict) -> dict:
 def kb_summary(kb: dict) -> str:
     # In thông tin tổng hợp của KB
     lines = [
-        f"KB Summary (N={int(round(kb['n_vars'] ** (1/3)))}x{int(round(kb['n_vars'] ** (1/3)))})",
+        f"KB Summary (N = {int(round(kb['n_vars'] ** (1/3)))} x {int(round(kb['n_vars'] ** (1/3)))})",
         f"  Total variables : {kb['n_vars']}",
         f"  Total clauses   : {kb['n_clauses']}",
         "  Breakdown by axiom:",
@@ -208,3 +208,27 @@ def kb_summary(kb: dict) -> str:
     for name, clauses in kb["axioms"].items():
         lines.append(f"    {name}: {len(clauses)} clauses")
     return "\n".join(lines)
+
+# Kiểm tra solution có thỏa mãn toàn bộ KB (CNF)?
+def verify_solution(puzzle: dict, solution: list) -> bool:
+    # True = solution hợp lệ theo tất cả axioms A1-A7.
+    
+    n  = puzzle["size"]
+    kb = generate_kb(puzzle)
+
+    # Tập literal đúng: Val(i,j,v) = True với v = solution[i][j]
+    true_lits = set()
+    for i in range(n):
+        for j in range(n):
+            true_lits.add(var(i, j, solution[i][j], n))
+
+    # Mỗi clause phải có ít nhất 1 literal đúng
+    for clause in kb["clauses"]:
+        satisfied = any(
+            (lit > 0 and lit in true_lits) or
+            (lit < 0 and -lit not in true_lits)
+            for lit in clause
+        )
+        if not satisfied:
+            return False
+    return True

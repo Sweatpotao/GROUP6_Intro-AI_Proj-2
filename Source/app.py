@@ -10,7 +10,7 @@ import importlib
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QComboBox, QPushButton, QFrame, QScrollArea,
-    QGroupBox, QSlider, QMessageBox, QListWidget
+    QGroupBox, QSlider, QMessageBox, QListWidget, QDialog
 )
 from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal, QObject, QTimer
@@ -18,6 +18,7 @@ from PyQt5.QtGui import QFont, QPainter, QColor, QPen
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+from core.cnf_generator import generate_kb, kb_summary, verify_solution
 from core.parser  import load_all_puzzles
 from core.logger  import save_output
 from core.config  import STATUS_SOLVED, STATUS_TIMEOUT, STATUS_STEP_LIMIT, STATUS_UNSOLVABLE
@@ -128,12 +129,15 @@ class App(QWidget):
         self.run_btn.setObjectName("solveBtn")
         self.load_data_btn = QPushButton("Show Result")
         self.load_data_btn.setObjectName("showResultBtn")
-        
+        self.cnf_btn = QPushButton("CNF for Puzzle")
+        self.cnf_btn.setObjectName("CNFBtn")
+
         t_layout.addWidget(QLabel("Puzzle:"))
         t_layout.addWidget(self.puzzle_box)
         t_layout.addWidget(QLabel("Algo:"))
         t_layout.addWidget(self.algo_box)
         t_layout.addStretch()
+        t_layout.addWidget(self.cnf_btn)
         t_layout.addWidget(self.load_btn)
         t_layout.addWidget(self.load_data_btn)
         t_layout.addWidget(self.run_btn)
@@ -241,6 +245,7 @@ class App(QWidget):
         self.puzzle_box.currentIndexChanged.connect(self.load_selected_puzzle)
         self.puzzle_box.currentIndexChanged.connect(self.disable_stats_btn)
         self.algo_box.currentIndexChanged.connect(self.disable_stats_btn)
+        self.cnf_btn.clicked.connect(self.verify_cnf)
         self.load_btn.clicked.connect(self.reload_input)
         self.load_data_btn.pressed.connect(self.show_answer)
         self.load_data_btn.released.connect(self.hide_answer)
@@ -254,6 +259,7 @@ class App(QWidget):
     def set_ui_locked(self, locked):
         self.puzzle_box.setDisabled(locked)
         self.algo_box.setDisabled(locked)
+        self.cnf_btn.setDisabled(locked)
         self.load_btn.setDisabled(locked)
         self.load_data_btn.setDisabled(locked)
         self.run_btn.setDisabled(locked)
@@ -320,13 +326,11 @@ class App(QWidget):
                 r, c, val, action = step
                 
                 if action == 0:
-                    act_str = "Given"
+                    items.append(f"Step {i+1}: Given '{val}' at ({r},{c})")
                 elif action == 1:
-                    act_str = "Fill"
+                    items.append(f"Step {i+1}: Fill '{val}' at ({r},{c})")
                 else:
-                    act_str = "Remove"
-                    
-                items.append(f"Step {i+1}: {act_str} '{val}' at ({r},{c})")
+                    items.append(f"Step {i+1}: Remove at ({r},{c})")
 
             self.step_list.addItems(items)
         finally:
@@ -430,7 +434,104 @@ class App(QWidget):
             cell.style().unpolish(cell)
             cell.style().polish(cell)
 
-    # ========================================================
+    # Verify CNF
+    def verify_cnf(self):
+        if not self.puzzle:
+            QMessageBox.warning(self, "Warning", "Please load a puzzle first!")
+            return
+
+        puzzle = self.puzzle
+        n      = puzzle["size"]
+
+        # Lấy grid hiện tại từ cells (list phẳng)
+        cell_map     = {(c.r, c.c): c for c in self.cells}
+        current_grid = []
+        for i in range(n):
+            row = []
+            for j in range(n):
+                cell = cell_map.get((i, j))
+                txt  = cell.text() if cell else ""
+                row.append(int(txt) if txt.isdigit() else 0)
+            current_grid.append(row)
+
+        # Sinh KB + dùng kb_summary()
+        kb      = generate_kb(puzzle)
+        summary = kb_summary(kb)   # dùng hàm có sẵn
+
+        # Verify
+        is_complete = all(
+            current_grid[i][j] != 0
+            for i in range(n) for j in range(n)
+        )
+        if not is_complete:
+            verify_color = "#e67e22"
+            verify_bg    = "#fff8e1"
+            verify_icon  = "⚠️"
+            verify_text  = "Skipped — puzzle not fully solved yet."
+        elif verify_solution(puzzle, current_grid):
+            verify_color = "#27ae60"
+            verify_bg    = "#eafaf1"
+            verify_icon  = "✅"
+            verify_text  = "PASSED — solution satisfies all axioms."
+        else:
+            verify_color = "#e74c3c"
+            verify_bg    = "#fdf2f2"
+            verify_icon  = "❌"
+            verify_text  = "FAILED — logic violation detected."
+
+        html = f"""
+        <div style="font-family:'Consolas','Courier New',monospace; padding:4px;">
+            <div style="font-size:14px; font-weight:bold; color:#2c3e50;
+                        border-bottom:2px solid #3498db; padding-bottom:8px; margin-bottom:12px;">
+                📦 Knowledge Base Summary
+            </div>
+            <pre style="margin:0; font-size:13px; color:#2c3e50;
+                        line-height:1.7; white-space:pre;">{summary}</pre>
+            <div style="margin-top:14px; padding:10px 14px; background:{verify_bg};
+                        border-left:4px solid {verify_color}; border-radius:4px;">
+                <span style="color:{verify_color}; font-size:13px; font-weight:bold;">
+                    {verify_icon} CNF Verification: {verify_text}
+                </span>
+            </div>
+        </div>
+        """
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("CNF Knowledge Base")
+        dlg.setFixedWidth(480)
+        # Fix: cho phép đóng bằng X trên window title
+        dlg.setWindowFlags(Qt.Dialog | Qt.WindowCloseButtonHint)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(16, 16, 16, 12)
+        layout.setSpacing(8)
+
+        content = QLabel(html)
+        content.setWordWrap(False)
+        content.setTextFormat(Qt.RichText)
+        content.setStyleSheet("background: white; border-radius: 8px;")
+
+        ok_btn = QPushButton("OK")
+        ok_btn.setFixedWidth(80)
+        ok_btn.clicked.connect(dlg.accept)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(ok_btn)
+
+        layout.addWidget(content)
+        layout.addLayout(btn_row)
+
+        dlg.setStyleSheet("""
+            QDialog { background: white; border-radius: 10px; }
+            QPushButton {
+                background: #3498db; color: white;
+                border-radius: 6px; padding: 6px 16px; font-weight: bold;
+            }
+            QPushButton:hover { background: #2980b9; }
+        """)
+
+        dlg.exec_()
 
     def reload_input(self):
         self.load_selected_puzzle()

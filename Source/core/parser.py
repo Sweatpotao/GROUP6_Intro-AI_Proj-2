@@ -80,27 +80,3 @@ def _validate(data: dict, filepath: str):
         for v in row:
             if v not in (-1, 0, 1):
                 raise ValueError(f"[{filepath}] invalid v_constraints value: {v}")
-
-
-def get_givens(puzzle: dict) -> list[tuple]:
-    # List các ô cho sẵn: [(row, col, value), ...]
-    n = puzzle["size"]
-    grid = puzzle["grid"]
-    return [
-        (i, j, grid[i][j])
-        for i in range(n)
-        for j in range(n)
-        if grid[i][j] != 0
-    ]
-
-
-def get_h_constraint(puzzle: dict, row: int, col: int) -> int:
-    # Trả về ràng buộc ngang
-    # 1 = '<', -1 = '>', 0 = none
-    return puzzle["h_constraints"][row][col]
-
-
-def get_v_constraint(puzzle: dict, row: int, col: int) -> int:
-    # Trả về ràng buộc dọc
-    # 1 = '<', -1 = '>', 0 = none
-    return puzzle["v_constraints"][row][col]

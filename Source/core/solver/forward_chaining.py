@@ -26,9 +26,8 @@ class ForwardChainingSolver(BaseSolver):
         # Domain[i][j] = set các giá trị còn có thể của ô (i,j)
         domains = self._init_domains()
 
-        # Lan truyền ràng buộc (Propagate) từ given clues
-        ok = self._propagate(domains)
-        if not ok:
+        # Propagate ban đầu
+        if not self._propagate(domains, []):
             return False
 
         # Giải quyết các ô còn lại bằng backtracking trên domain đã thu hẹp
@@ -51,11 +50,14 @@ class ForwardChainingSolver(BaseSolver):
 
     # ------------------------------------------------------------------
     # Propagation - Lan truyền (forward chaining)
-    def _propagate(self, domains: list) -> bool:
+    def _propagate(self, domains: list, changes: list) -> bool:
         # Lan truyền ràng buộc liên tục cho đến khi ổn định.
         # Trả về False nếu phát hiện mâu thuẫn (domain rỗng).
         changed = True
         while changed:
+            if self.should_stop():
+                return False
+
             changed = False
             self.inferences += 1
 
@@ -69,24 +71,26 @@ class ForwardChainingSolver(BaseSolver):
                     if len(domains[i][j]) == 1:
                         val = next(iter(domains[i][j]))
 
-                        # Xóa val khỏi cung hàng
+                        # Row
                         for jj in range(self.n):
                             if jj != j and val in domains[i][jj]:
-                                domains[i][jj].discard(val)
+                                domains[i][jj].remove(val)
+                                changes.append((i, jj, val))
                                 changed = True
-                                if len(domains[i][jj]) == 0:
+                                if not domains[i][jj]:
                                     return False
 
-                        # Xóa val khỏi cung cột
+                        # Column
                         for ii in range(self.n):
                             if ii != i and val in domains[ii][j]:
-                                domains[ii][j].discard(val)
+                                domains[ii][j].remove(val)
+                                changes.append((ii, j, val))
                                 changed = True
-                                if len(domains[ii][j]) == 0:
+                                if not domains[ii][j]:
                                     return False
 
                         # Áp dụng inequality constraints
-                        ok, was_changed = self._propagate_inequalities(domains, i, j, val)
+                        ok, was_changed = self._propagate_inequalities(domains, i, j, val, changes)
                         if not ok:
                             return False
                         if was_changed:
@@ -96,7 +100,7 @@ class ForwardChainingSolver(BaseSolver):
 
     # ------------------------------------------------------------------
     # Lan truyền bất đẳng thức (>, <)
-    def _propagate_inequalities(self, domains, row, col, val) -> tuple:
+    def _propagate_inequalities(self, domains, row, col, val, changes) -> tuple:
         # Dựa vào val vừa biết ở (row,col)
         # suy diễn và loại bỏ các giá trị không hợp lệ ở các ô kế cận
         # Trả về (ok, changed)
@@ -105,90 +109,89 @@ class ForwardChainingSolver(BaseSolver):
         vc = self.puzzle["v_constraints"]
         changed = False
 
-        # Ràng buộc ngang: (row, col) & (row, col+1)
+        # Right
         if col < self.n - 1:
             c = hc[row][col]
-            if c == 1:      # val < neighbor_right
-                to_remove = {v for v in domains[row][col + 1] if v <= val}
-                if to_remove:
-                    domains[row][col + 1] -= to_remove
-                    changed = True
-                    if len(domains[row][col + 1]) == 0:
-                        return False, changed
-            elif c == -1:   # val > neighbor_right
-                to_remove = {v for v in domains[row][col + 1] if v >= val}
-                if to_remove:
-                    domains[row][col + 1] -= to_remove
-                    changed = True
-                    if len(domains[row][col + 1]) == 0:
-                        return False, changed
+            if c == 1:
+                to_remove = [v for v in domains[row][col + 1] if v <= val]
+            elif c == -1:
+                to_remove = [v for v in domains[row][col + 1] if v >= val]
+            else:
+                to_remove = []
 
-        # Ràng buộc ngang: (row, col-1) & (row, col)
+            for v in to_remove:
+                domains[row][col + 1].remove(v)
+                changes.append((row, col + 1, v))
+                changed = True
+            if not domains[row][col + 1]:
+                return False, changed
+
+        # Left
         if col > 0:
             c = hc[row][col - 1]
-            if c == 1:      # neighbor_left < val
-                to_remove = {v for v in domains[row][col - 1] if v >= val}
-                if to_remove:
-                    domains[row][col - 1] -= to_remove
-                    changed = True
-                    if len(domains[row][col - 1]) == 0:
-                        return False, changed
-            elif c == -1:   # neighbor_left > val
-                to_remove = {v for v in domains[row][col - 1] if v <= val}
-                if to_remove:
-                    domains[row][col - 1] -= to_remove
-                    changed = True
-                    if len(domains[row][col - 1]) == 0:
-                        return False, changed
+            if c == 1:
+                to_remove = [v for v in domains[row][col - 1] if v >= val]
+            elif c == -1:
+                to_remove = [v for v in domains[row][col - 1] if v <= val]
+            else:
+                to_remove = []
 
-        # Ràng buộc dọc: (row, col) & (row+1, col)
+            for v in to_remove:
+                domains[row][col - 1].remove(v)
+                changes.append((row, col - 1, v))
+                changed = True
+            if not domains[row][col - 1]:
+                return False, changed
+
+        # Down
         if row < self.n - 1:
             c = vc[row][col]
-            if c == 1:      # val < neighbor_below
-                to_remove = {v for v in domains[row + 1][col] if v <= val}
-                if to_remove:
-                    domains[row + 1][col] -= to_remove
-                    changed = True
-                    if len(domains[row + 1][col]) == 0:
-                        return False, changed
-            elif c == -1:   # val > neighbor_below
-                to_remove = {v for v in domains[row + 1][col] if v >= val}
-                if to_remove:
-                    domains[row + 1][col] -= to_remove
-                    changed = True
-                    if len(domains[row + 1][col]) == 0:
-                        return False, changed
+            if c == 1:
+                to_remove = [v for v in domains[row + 1][col] if v <= val]
+            elif c == -1:
+                to_remove = [v for v in domains[row + 1][col] if v >= val]
+            else:
+                to_remove = []
 
-        # Ràng buộc dọc: (row-1, col) & (row, col)
+            for v in to_remove:
+                domains[row + 1][col].remove(v)
+                changes.append((row + 1, col, v))
+                changed = True
+            if not domains[row + 1][col]:
+                return False, changed
+
+        # Up
         if row > 0:
             c = vc[row - 1][col]
-            if c == 1:      # neighbor_above < val
-                to_remove = {v for v in domains[row - 1][col] if v >= val}
-                if to_remove:
-                    domains[row - 1][col] -= to_remove
-                    changed = True
-                    if len(domains[row - 1][col]) == 0:
-                        return False, changed
-            elif c == -1:   # neighbor_above > val
-                to_remove = {v for v in domains[row - 1][col] if v <= val}
-                if to_remove:
-                    domains[row - 1][col] -= to_remove
-                    changed = True
-                    if len(domains[row - 1][col]) == 0:
-                        return False, changed
+            if c == 1:
+                to_remove = [v for v in domains[row - 1][col] if v >= val]
+            elif c == -1:
+                to_remove = [v for v in domains[row - 1][col] if v <= val]
+            else:
+                to_remove = []
+
+            for v in to_remove:
+                domains[row - 1][col].remove(v)
+                changes.append((row - 1, col, v))
+                changed = True
+            if not domains[row - 1][col]:
+                return False, changed
 
         return True, changed
 
     # ------------------------------------------------------------------
     # Search - Dùng khi suy luận chưa đủ để giải quyết toàn bộ
     def _search(self, domains: list) -> bool:
-        # Tìm ô chưa được gán có domain nhỏ nhất (MRV heuristic), thử từng giá trị, lan truyền tiếp, rồi đệ quy.
+        if self.should_stop():
+            return False
+
         target = None
         min_size = self.n + 1
+
         for i in range(self.n):
             for j in range(self.n):
                 size = len(domains[i][j])
-                if size > 1 and size < min_size:
+                if 1 < size < min_size:
                     min_size = size
                     target = (i, j)
 
@@ -198,21 +201,27 @@ class ForwardChainingSolver(BaseSolver):
             return True
 
         row, col = target
+        candidates = sorted(domains[row][col])
 
-        # Thử từng giá trị khả thi trong domain của ô đó
-        for val in sorted(domains[row][col]):
+        for val in candidates:
             self.inferences += 1
+            changes = []
 
-            # Copy domains để thử val
-            new_domains = [[set(cell) for cell in row_d] for row_d in domains]
-            new_domains[row][col] = {val}
+            # Fix value
+            for other in list(domains[row][col]):
+                if other != val:
+                    domains[row][col].remove(other)
+                    changes.append((row, col, other))
 
-            ok = self._propagate(new_domains)
-            if ok:
+            if self._propagate(domains, changes):
                 self.record_step(row, col, val, ACTION_ASSIGN)
-                if self._search(new_domains):
+
+                if self._search(domains):
                     return True
+
                 self.record_step(row, col, 0, ACTION_BACKTRACK)
+
+            self._undo_changes(domains, changes)
 
         return False
 
@@ -225,3 +234,9 @@ class ForwardChainingSolver(BaseSolver):
                 if self.grid[i][j] == 0:
                     self.grid[i][j] = val
                     self.record_step(i, j, val, ACTION_ASSIGN)
+
+    # ------------------------------------------------------------------
+    def _undo_changes(self, domains, changes):
+        while changes:
+            i, j, val = changes.pop()
+            domains[i][j].add(val)

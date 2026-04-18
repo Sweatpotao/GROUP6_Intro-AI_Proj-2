@@ -37,35 +37,29 @@ class AStarBase(BaseSolver):
         h_start = self._heuristic(self.grid)
         f_start = g_start + h_start
 
-        # (f, counter, g, state)
-        # counter tránh so sánh state khi f bằng nhau
+        # (f, counter, g, state, search_row, search_col)
         counter = 0
-        open_set = [(f_start, counter, g_start, start)]
-        closed_set = set()
-
+        open_set = [(f_start, counter, g_start, start, 0, 0)]
+        
         # Lưu path để reconstruct steps
-        # parent[state] = (prev_state, row, col, val)
         parent = {start: None}
 
         while open_set:
             if self.should_stop():
                 return False
-            f, _, g, state = heapq.heappop(open_set)
+                
+            f, _, g, state, search_r, search_c = heapq.heappop(open_set)
             self.inferences += 1
-
-            if state in closed_set:
-                continue
-            closed_set.add(state)
 
             grid = self._to_grid(state)
 
-            # Kiểm tra đã giải xong chưa
-            if self._is_complete(grid):
+            # Kiểm tra đã giải xong chưa, g(n) = số ô đã điền (tính cả given) --> tận dụng check is_complete luôn
+            if g == self.n * self.n:
                 self._reconstruct(state, parent)
                 return True
 
-            # Tìm ô trống tiếp theo để gán
-            cell = self._next_empty_from(grid)
+            # Tìm ô trống tiếp theo để gán, bắt đầu từ (search_r, search_c)
+            cell = self._next_empty_from(grid, search_r, search_c)
             if cell is None:
                 continue
 
@@ -77,15 +71,14 @@ class AStarBase(BaseSolver):
                 if self._is_valid_cell(grid, row, col, val):
                     new_state = self._to_state(grid)
 
-                    if new_state not in closed_set:
-                        new_g = g + 1
-                        new_h = self._heuristic(grid)
-                        new_f = new_g + new_h
+                    new_g = g + 1
+                    new_h = self._heuristic(grid)
+                    new_f = new_g + new_h
 
-                        counter += 1
-                        heapq.heappush(open_set, (new_f, counter, new_g, new_state))
-                        # Luôn update parent để đảm bảo lưu path tốt nhất
-                        parent[new_state] = (state, row, col, val)
+                    counter += 1
+                    # Truyền (row, col) xuống các node con để chúng không phải quét lại từ đầu
+                    heapq.heappush(open_set, (new_f, counter, new_g, new_state, row, col))
+                    parent[new_state] = (state, row, col, val)
 
                 grid[row][col] = 0  # hoàn tác
 
@@ -115,20 +108,23 @@ class AStarBase(BaseSolver):
         # Chuyển state tuple -> grid list[list] (mutable)
         return [list(row) for row in state]
 
-    def _is_complete(self, grid: list) -> bool:
-        # Kiểm tra grid đã điền đầy chưa
-        return all(grid[i][j] != 0 for i in range(self.n) for j in range(self.n))
-
-    def _next_empty_from(self, grid: list):
-        # Trả về ô trống đầu tiên trong grid
-        for i in range(self.n):
+    # Trả về ô trống tiếp theo trong grid, quét từ tọa độ (start_r, start_c) để tiết kiệm O(N^2) ở mỗi node
+    def _next_empty_from(self, grid: list, start_r: int, start_c: int):
+        # Kiểm tra phần còn lại của hàng start_r
+        for j in range(start_c, self.n):
+            if grid[start_r][j] == 0:
+                return (start_r, j)
+                
+        # Kiểm tra các hàng bên dưới start_r
+        for i in range(start_r + 1, self.n):
             for j in range(self.n):
                 if grid[i][j] == 0:
                     return (i, j)
+                    
         return None
 
+    # Kiểm tra val có hợp lệ tại (row,col) trong grid hiện tại
     def _is_valid_cell(self, grid: list, row: int, col: int, val: int) -> bool:
-        """Kiểm tra val có hợp lệ tại (row,col) trong grid hiện tại."""
         # Kiểm tra hàng
         for j in range(self.n):
             if j != col and grid[row][j] == val:

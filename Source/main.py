@@ -6,10 +6,12 @@ import tracemalloc
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from core.parser    import load_all_puzzles
-from core.logger    import save_output, rebuild_log
-from core.formatter import format_grid, print_separator
-from core.config    import (
+from core.cnf_generator import generate_kb, kb_summary, verify_solution
+from core.parser        import load_all_puzzles
+from core.logger        import save_output, rebuild_log
+from core.formatter     import format_grid, print_separator, format_puzzle
+from core.config        import (
+    MAX_STEPS,
     TIME_LIM,
     STATUS_SOLVED,
     STATUS_UNSOLVABLE,
@@ -93,11 +95,14 @@ def _run_with_timeout(SolverClass, puzzle) -> dict:
     if t.is_alive():
         # Ra hiệu cho solver dừng
         solver.stop_event.set()
-        # Đợi tối đa 2s để solver xử lý xong iteration hiện tại
-        t.join(timeout=2)
+        t.join(timeout=2)   # Đợi tối đa 2s để solver xử lý xong iteration hiện tại
+
+        # STEP LIMIT bị delay đến khi TIMEOUT
+        actual_steps = len(solver.steps) if solver.steps else 0
+        final_status = STATUS_STEP_LIMIT if actual_steps >= MAX_STEPS else STATUS_TIMEOUT
 
         return {
-            "status":     STATUS_TIMEOUT,
+            "status":     final_status,
             "time_ms":    TIME_LIM * 1000,
             "memory_kb":  round(peak / 1024, 2),
             "inferences": solver.inferences,
@@ -140,7 +145,9 @@ def run_puzzle(puzzle: dict, verbose: bool = True) -> tuple:
     solution  = None
 
     if verbose:
-        print(f"\n[{puzzle_id}]  size={n}x{n}")
+        print(f"\n")
+        print_separator()
+        print(f"[{puzzle_id}]  size = {n} x {n}")
         print_separator()
 
     for name, SolverClass in SOLVERS:
@@ -193,6 +200,15 @@ def main():
     success = 0
 
     for i, puzzle in enumerate(puzzles, 1):
+        print_separator("=")
+        print(f"PROCESSING PUZZLE {i}: {puzzle['id']}")
+        print_separator("=")
+        
+        # --- TÓM TẮT KB ---
+        # Show số lượng biến và clauses mà máy tính phải xử lý
+        kb = generate_kb(puzzle)
+        print(kb_summary(kb))
+
         solution, algo_results = run_puzzle(puzzle, verbose=True)
 
         save_output(
@@ -202,17 +218,28 @@ def main():
             algorithms = algo_results,
         )
 
+        print("\n\n  Initial Puzzle:")
+        for line in format_puzzle(puzzle).split("\n"):
+            print(f"    {line}")
+        
         if solution:
             success += 1
             print(f"\n  Solution:")
             for line in format_grid(puzzle, solution).split("\n"):
                 print(f"    {line}")
+
+            # Kiểm chứng qua CNF
+            if verify_solution(puzzle, solution):
+                print("\n  [CNF Verification]: PASSED [✓]")
+            else:
+                print("\n  [CNF Verification]: FAILED [✗]")
         else:
             print(f"\n  No solution found.")
 
         print_separator()
+        print(f"\n")
 
-    print(f"\n\nLogging data...\n")
+    print(f"\nLogging data...\n")
     log_path = rebuild_log()
 
     print(f"{'=' * 50}")
