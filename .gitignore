@@ -12,10 +12,12 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Generated inputs (giữ lại input_01.json làm mẫu)
+# Generated inputs (giữ lại 2 input mẫu)
 Source/Inputs/*.json
 !Source/Inputs/input_01.json
+!Source/Inputs/input_09.json
 
-# Generated outputs (giữ lại output_01.json làm mẫu)
+# Generated outputs (giữ lại 2 output mẫu)
 Source/Outputs/*.json
 !Source/Outputs/output_01.json
+!Source/Inputs/input_09.json

@@ -29,9 +29,9 @@ def format_grid(puzzle: dict, solution: list[list[int]]) -> str:
             for j in range(n):
                 c = vc[i][j]
                 if c == 1:
-                    v_row_str += "^".rjust(w)
+                    v_row_str += "∧".rjust(w)
                 elif c == -1:
-                    v_row_str += "v".rjust(w)
+                    v_row_str += "V".rjust(w)
                 else:
                     v_row_str += " " * w
                 if j < n - 1:

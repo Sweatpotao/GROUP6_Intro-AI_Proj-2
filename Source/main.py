@@ -11,8 +11,11 @@ from core.parser        import load_all_puzzles
 from core.logger        import save_output, rebuild_log
 from core.formatter     import format_grid, print_separator, format_puzzle
 from core.config        import (
+    INPUT_DIR,
+    
     MAX_STEPS,
     TIME_LIM,
+
     STATUS_SOLVED,
     STATUS_UNSOLVABLE,
     STATUS_TIMEOUT,
@@ -33,18 +36,15 @@ from core.solver.brute_force_opt   import BruteForce_optimized
 # ---------------------------------------------------------------------------
 
 SOLVERS = [
-    ("forward_chaining",  ForwardChainingSolver),
-    ("backward_chaining", BackwardChainingSolver),
-    ("astar_h1",          AStarH1),
-    ("astar_h2",          AStarH2),
-    ("astar_h3",          AStarH3),
+    ("forward chaining",  ForwardChainingSolver),
+    ("backward chaining", BackwardChainingSolver),
+    ("A* H1",          AStarH1),
+    ("A* H2",          AStarH2),
+    ("A* H3",          AStarH3),
     ("backtracking",      BacktrackingSolver),
-    ("brute_force",       BruteForceSolver),
-    ("brute_force_opt",   BruteForce_optimized),
+    ("brute force",       BruteForceSolver),
+    ("brute force opt",   BruteForce_optimized),
 ]
-
-INPUT_DIR = os.path.join(os.path.dirname(__file__), "Inputs")
-
 
 # ---------------------------------------------------------------------------
 # Helpers

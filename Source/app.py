@@ -10,24 +10,23 @@ import importlib
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QComboBox, QPushButton, QFrame, QScrollArea,
-    QGroupBox, QSlider, QMessageBox, QListWidget, QDialog
+    QGroupBox, QSlider, QMessageBox, QListWidget
 )
 from PyQt5.QtWidgets import QSizePolicy
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, QTimer
-from PyQt5.QtGui import QFont, QPainter, QColor, QPen
+from PyQt5.QtCore    import Qt, pyqtSignal, QObject, QTimer
+from PyQt5.QtGui     import QFont, QPainter, QColor, QPen
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from core.cnf_generator import generate_kb, kb_summary, verify_solution
+from core.cnf_dialog   import show_cnf_dialog
 from core.parser  import load_all_puzzles
 from core.logger  import save_output
-from core.config  import STATUS_SOLVED, STATUS_TIMEOUT, STATUS_STEP_LIMIT, STATUS_UNSOLVABLE
-import visualize_stats
+from core.config  import STATUS_SOLVED, STATUS_TIMEOUT, STATUS_STEP_LIMIT, STATUS_UNSOLVABLE, INPUT_DIR, OUTPUT_DIR
 from main         import _run_with_timeout, SOLVERS
+import visualize_stats
 
-INPUT_DIR  = os.path.join(os.path.dirname(__file__), "Inputs")
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "Outputs")
-SOLVERS = [s for s in SOLVERS if s[0] != "brute_force"]
+# Solver list
+SOLVERS = [s for s in SOLVERS if s[0] != "brute force"]
 
 class SolverSignals(QObject):
     finished = pyqtSignal(dict)
@@ -183,7 +182,7 @@ class App(QWidget):
         right_side = QVBoxLayout()
         self.info_card = QFrame()
         self.info_card.setObjectName("infoPanel")
-        self.info_card.setFixedWidth(330)
+        self.info_card.setFixedWidth(400)
         
         info_layout = QVBoxLayout(self.info_card)
         self.result_info = QLabel("Ready.")
@@ -439,99 +438,7 @@ class App(QWidget):
         if not self.puzzle:
             QMessageBox.warning(self, "Warning", "Please load a puzzle first!")
             return
-
-        puzzle = self.puzzle
-        n      = puzzle["size"]
-
-        # Lấy grid hiện tại từ cells (list phẳng)
-        cell_map     = {(c.r, c.c): c for c in self.cells}
-        current_grid = []
-        for i in range(n):
-            row = []
-            for j in range(n):
-                cell = cell_map.get((i, j))
-                txt  = cell.text() if cell else ""
-                row.append(int(txt) if txt.isdigit() else 0)
-            current_grid.append(row)
-
-        # Sinh KB + dùng kb_summary()
-        kb      = generate_kb(puzzle)
-        summary = kb_summary(kb)   # dùng hàm có sẵn
-
-        # Verify
-        is_complete = all(
-            current_grid[i][j] != 0
-            for i in range(n) for j in range(n)
-        )
-        if not is_complete:
-            verify_color = "#e67e22"
-            verify_bg    = "#fff8e1"
-            verify_icon  = "⚠️"
-            verify_text  = "Skipped — puzzle not fully solved yet."
-        elif verify_solution(puzzle, current_grid):
-            verify_color = "#27ae60"
-            verify_bg    = "#eafaf1"
-            verify_icon  = "✅"
-            verify_text  = "PASSED — solution satisfies all axioms."
-        else:
-            verify_color = "#e74c3c"
-            verify_bg    = "#fdf2f2"
-            verify_icon  = "❌"
-            verify_text  = "FAILED — logic violation detected."
-
-        html = f"""
-        <div style="font-family:'Consolas','Courier New',monospace; padding:4px;">
-            <div style="font-size:14px; font-weight:bold; color:#2c3e50;
-                        border-bottom:2px solid #3498db; padding-bottom:8px; margin-bottom:12px;">
-                📦 Knowledge Base Summary
-            </div>
-            <pre style="margin:0; font-size:13px; color:#2c3e50;
-                        line-height:1.7; white-space:pre;">{summary}</pre>
-            <div style="margin-top:14px; padding:10px 14px; background:{verify_bg};
-                        border-left:4px solid {verify_color}; border-radius:4px;">
-                <span style="color:{verify_color}; font-size:13px; font-weight:bold;">
-                    {verify_icon} CNF Verification: {verify_text}
-                </span>
-            </div>
-        </div>
-        """
-
-        dlg = QDialog(self)
-        dlg.setWindowTitle("CNF Knowledge Base")
-        dlg.setFixedWidth(480)
-        # Fix: cho phép đóng bằng X trên window title
-        dlg.setWindowFlags(Qt.Dialog | Qt.WindowCloseButtonHint)
-
-        layout = QVBoxLayout(dlg)
-        layout.setContentsMargins(16, 16, 16, 12)
-        layout.setSpacing(8)
-
-        content = QLabel(html)
-        content.setWordWrap(False)
-        content.setTextFormat(Qt.RichText)
-        content.setStyleSheet("background: white; border-radius: 8px;")
-
-        ok_btn = QPushButton("OK")
-        ok_btn.setFixedWidth(80)
-        ok_btn.clicked.connect(dlg.accept)
-
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        btn_row.addWidget(ok_btn)
-
-        layout.addWidget(content)
-        layout.addLayout(btn_row)
-
-        dlg.setStyleSheet("""
-            QDialog { background: white; border-radius: 10px; }
-            QPushButton {
-                background: #3498db; color: white;
-                border-radius: 6px; padding: 6px 16px; font-weight: bold;
-            }
-            QPushButton:hover { background: #2980b9; }
-        """)
-
-        dlg.exec_()
+        show_cnf_dialog(self, self.puzzle, self.cells)
 
     def reload_input(self):
         self.load_selected_puzzle()
@@ -566,7 +473,7 @@ class App(QWidget):
                     self.grid_layout.addWidget(QLabel(text), i, j, Qt.AlignCenter)
                 elif i % 2 == 1 and j % 2 == 0:
                     val = vc[i // 2][j // 2]
-                    text = "^" if val == 1 else "v" if val == -1 else ""
+                    text = "∧" if val == 1 else "v" if val == -1 else ""
                     self.grid_layout.addWidget(QLabel(text), i, j, Qt.AlignCenter)
 
     def resizeEvent(self, event):

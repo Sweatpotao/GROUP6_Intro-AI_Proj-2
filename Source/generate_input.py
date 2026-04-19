@@ -2,33 +2,9 @@ import json
 import os
 import re
 import random
-from core.config import VALID_SIZES
 
-# ---------------------------------------------------------------------------
-# Cấu hình
-# ---------------------------------------------------------------------------
-INPUT_DIR = os.path.join(os.path.dirname(__file__), "Inputs")
-
-VALID_COUNTS = [5, 10, 20, 30]
-
-# Tỉ lệ ô given so với tổng ô (N*N), theo size
-# Puzzle nhỏ cần nhiều given hơn để có lời giải unique
-GIVEN_RATIO = {
-    4: 0.40,
-    5: 0.36,
-    6: 0.30,
-    7: 0.25,
-    9: 0.35,
-}
-
-# Số lượng inequality constraints theo size
-CONSTRAINT_RATIO = {
-    4: 0.50,
-    5: 0.45,
-    6: 0.40,
-    7: 0.35,
-    9: 0.35,
-}
+from core.config    import VALID_SIZES, GIVEN_RATIO, CONSTRAINT_RATIO, VALID_COUNTS, INPUT_DIR
+from core.formatter import print_separator
 
 # ---------------------------------------------------------------------------
 # Xử lý file input_XX.json
@@ -251,8 +227,9 @@ def main():
     os.makedirs(INPUT_DIR, exist_ok=True)
 
     # Hỏi số lượng inputs
-    print("Futoshiki - Input Generator")
-    print("-" * 30)
+    print_separator("=")
+    print("\t  Futoshiki - Input Generator")
+    print_separator("=")
 
     # Clear file cũ
     _cleanup_old_files()
@@ -273,7 +250,7 @@ def main():
     per_size_list = [base + (1 if i < remainder else 0) for i in range(len(VALID_SIZES))]
 
     print(f"\nGenerating {count} inputs...")
-    print("-" * 30)
+    print_separator()
 
     idx = 1
     for size_idx, n in enumerate(VALID_SIZES):
@@ -288,8 +265,9 @@ def main():
             print(f"  [{idx:02d}/{count}] {puzzle_id}.json  (size {n}x{n})")
             idx += 1
 
-    print("-" * 30)
-    print(f"Done. {count} files saved to: {INPUT_DIR}\n")
+    print_separator()
+    print(f"\nDone. {count} files saved to: {INPUT_DIR}\n")
+    print_separator()
 
 
 if __name__ == "__main__":
