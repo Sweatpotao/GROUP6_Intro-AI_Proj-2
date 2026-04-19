@@ -10,7 +10,7 @@ Solving Futoshiki puzzles using First-Order Logic & Inference Algorithms.
 **Python 3.7+**
 
 Install dependencies:
-```bash
+```
 pip install -r requirements.txt
 ```
 
@@ -146,7 +146,7 @@ Source/
 ### Step 1 — Generate inputs
 > Skip if `Inputs/` already has files.
 
-```bash
+```
 python generate_input.py
 ```
 
@@ -158,7 +158,7 @@ python generate_input.py
 ---
 
 ### Step 2A — Run via console
-```bash
+```
 python main.py
 ```
 
@@ -169,7 +169,7 @@ python main.py
 ---
 
 ### Step 2B — Run via UI
-```bash
+```
 python app.py
 ```
 
@@ -210,7 +210,7 @@ python app.py
 ### Step 3 — View comparison charts
 > After running `main.py`.
 
-```bash
+```
 python visualize_stats.py
 ```
 
@@ -242,7 +242,7 @@ Charts included:
 
 ## Configuration (`core/config.py`)
 
-```python
+```
 MAX_STEPS  = 10_000   # Max steps stored per solver (caps memory usage)
 TIME_LIM   = 10       # Timeout per solver in seconds
 
@@ -252,6 +252,26 @@ STATUS_TIMEOUT    = 2
 STATUS_STEP_LIMIT = 3
 
 VALID_SIZES = [4, 5, 6, 7, 9]
+
+import os             # Input / Output path
+BASE_DIR   = os.path.dirname(os.path.dirname(__file__))
+INPUT_DIR  = os.path.join(BASE_DIR, "Inputs")
+OUTPUT_DIR = os.path.join(BASE_DIR, "Outputs")
+
+GIVEN_RATIO = {
+    4: 0.20,
+    5: 0.25,
+    6: 0.30,
+    7: 0.35,
+    9: 0.35,
+}
+CONSTRAINT_RATIO = {
+    4: 0.20,
+    5: 0.25,
+    6: 0.30,
+    7: 0.35,
+    9: 0.35,
+}
 ```
 
 ---
