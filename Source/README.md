@@ -33,15 +33,18 @@ Source/
 |   |-- formatter.py             Format grid -> string for display
 |   |-- logger.py                Read/write output JSON & log JSON
 |   |-- cnf_generator.py         Generate KB/CNF from FOL axioms
+|   |-- cnf_dialog.py            CNF Knowledge Base dialog (used by app.py)
 |   |
 |   +-- solver/
 |       |-- base_solver.py       Abstract base class for all solvers
 |       |-- forward_chaining.py  Forward chaining (Modus Ponens propagation)
 |       |-- backward_chaining.py Backward chaining (SLD resolution, Prolog-style)
+|       |-- astar_base.py        A* abstract base class (shared framework for H1/H2/H3)
 |       |-- astar_h1.py          A* search - H1: cell count heuristic
 |       |-- astar_h2.py          A* search - H2: constrained cell heuristic
 |       |-- astar_h3.py          A* search - H3: AC-3 arc consistency
 |       |-- backtracking.py      Backtracking with constraint pruning
+|       |-- brute_force_opt.py   Brute force (used by app.py)
 |       +-- brute_force.py       Brute force (no pruning, baseline)
 |
 |-- main.py                      Console: run all solvers -> output + log
@@ -170,14 +173,37 @@ python main.py
 python app.py
 ```
 
-| Button | Action |
-|---|---|
-| **Load** | Read result from existing `output_XX.json` (fast, no computation) |
-| **Run** | Execute solver directly in background thread |
-| **View Stats** | Open comparison charts (requires output files) |
-| **Show Result / Visualize** | Replay step-by-step animation with speed control |
+**Toolbar controls:**
 
-> Switching puzzles or closing the window automatically stops any active simulation.
+| Control | Description |
+|---|---|
+| **Puzzle** dropdown | Select a specific puzzle or **ALL INPUT** to run all |
+| **Algo** dropdown | Select a specific algorithm or **ALL SOLVER** to run all |
+| **CNF for Puzzle** | Show Knowledge Base summary and verify the current grid against CNF axioms |
+| **Reset Map** | Reset the grid to its original unsolved state |
+| **Show Result** | Hold to preview the known answer (orange); release to hide |
+| **Solve** | Run the selected solver(s) in a background thread |
+| **View Full Stats** | Open comparison charts — enabled after a full run completes |
+
+**Run modes (controlled by Puzzle + Algo dropdowns):**
+
+| Puzzle | Algo | Mode | Description |
+|---|---|---|---|
+| Specific | Specific | Single | Run one solver on one puzzle |
+| ALL INPUT | Specific | Batch | Run one solver across all puzzles sequentially |
+| Specific | ALL SOLVER | Batch | Run all solvers on one puzzle |
+| ALL INPUT | ALL SOLVER | Full benchmark | Equivalent to running `main.py` — runs everything |
+
+> Batch and full-benchmark modes automatically clear old output files before starting and enable **View Full Stats** when complete.
+
+**Visualization Controls (right panel):**
+
+| Control | Description |
+|---|---|
+| Step list | Click any step to jump to that point in the solution trace |
+| **Run / End** | Auto-play the step trace at the configured speed |
+| **Stop / Resume** | Pause and resume auto-play |
+| Speed slider | Adjust playback speed from 3 to 200 steps/second |
 
 ---
 
@@ -210,6 +236,7 @@ Charts included:
 | 5 | **A\* H3** | `h(n)` = cells with domain > 1 after AC-3 — strongest, highest cost per node |
 | 6 | **Backtracking** | DFS with per-step constraint checking (pruning) |
 | 7 | **Brute Force** | Tries all combinations, checks constraints only after full assignment — baseline |
+| 8 | **Brute Force Opt** | Pre-prunes domain from given clues, then generates combinations — faster baseline |
 
 ---
 
