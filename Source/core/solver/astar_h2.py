@@ -3,69 +3,54 @@ from core.solver.astar_base import AStarBase
 
 class AStarH2(AStarBase):
     """
-    A* với heuristic H2: Ưu tiên các trạng thái có nhiều ô trống mang ràng buộc bất đẳng thức.
+    A* với heuristic H2: ưu tiên các ô chưa gán có liên quan đến inequality constraint.
 
-    Công thức: 
-        h(n) = (U + C) // 2
-    Trong đó:
-        U (unassigned): tổng số ô chưa gán.
-        C (constrained_unassigned): số ô chưa gán nằm trong các chuỗi ràng buộc.
+    Công thức:
+        h(n) = unassigned + constrained_unassigned // 2
 
-    Admissible vì:
-        1. Gọi h*(n) là chi phí thực tế để giải xong (số ô trống còn lại). 
-           Ta luôn có h*(n) = U.
-        2. Vì C luôn nhỏ hơn hoặc bằng U (một ô có ràng buộc thì chắc chắn là ô trống),
-           nên: h(n) = (U + C) / 2 <= (U + U) / 2 = U.
-        3. Vậy h(n) <= h*(n). Heuristic này hoàn toàn admissible.
+        Trong đó:
+            unassigned            = số ô chưa được gán giá trị
+            constrained_unassigned = số ô chưa gán có ít nhất 1 inequality constraint
 
-    So với H1:
-        - H1 chỉ đếm đơn thuần số ô chưa gán (h1 = U).
-        - H2 phân biệt được các trạng thái có cùng số ô trống: 
-          + Trạng thái nào có nhiều ô mang ràng buộc (khó giải hơn) sẽ có giá trị f(n) cao hơn.
-          + Giúp A* có "độ dốc" để ưu tiên mở rộng các nhánh "ít ràng buộc" & dễ kiểm soát trước,
-            tránh sa lầy vào các vùng vi phạm logic phức tạp ngay từ đầu.
+    Tính chất:
+        H2 là heuristic KHÔNG admissible (inadmissible by design).
+        Vì constrained_unassigned <= unassigned, nên:
+            h(n) <= unassigned + unassigned // 2 = 1.5 * unassigned
+        Chi phí thực tế = unassigned (mỗi ô cần đúng 1 lần gán).
+        Khi constrained_unassigned >= 2, h(n) > chi phí thực -> overestimate -> không admissible.
+
+    Mục đích:
+        Phần constrained_unassigned // 2 là bonus phạt cho các ô có constraints,
+        khiến A* ưu tiên xử lý các vùng nhiều ràng buộc trước.
+        Dù không đảm bảo optimal path, trong thực nghiệm H2 mở rộng ít node hơn H1
+        và thường nhanh hơn H3 vì không cần chạy AC-3 mỗi bước.
+
+    So sánh với H1 và H3:
+        H1: admissible, yếu nhất — chỉ đếm ô trống
+        H2: inadmissible, cân bằng tốt giữa tốc độ và hiệu quả tìm kiếm
+        H3: admissible, mạnh nhất — dùng AC-3, tốn chi phí tính toán cao hơn
     """
 
     def _heuristic(self, grid: list) -> int:
         hc = self.puzzle["h_constraints"]
         vc = self.puzzle["v_constraints"]
-        n = self.n
 
-        unassigned = 0
-        
-        # Dùng set lưu tọa độ các ô trống có liên quan đến ràng buộc (C).
-        # Cách này khắc phục lỗi đếm trùng khi 1 ô nằm ở giao điểm của nhiều bất đẳng thức
-        cells_in_chains = set()
+        unassigned             = 0
+        constrained_unassigned = 0
 
-        # Đếm tổng số ô chưa gán (U)
-        for i in range(n):
-            for j in range(n):
+        for i in range(self.n):
+            for j in range(self.n):
                 if grid[i][j] == 0:
                     unassigned += 1
 
-        # Quét các chuỗi ràng buộc ngang
-        for i in range(n):
-            for j in range(n - 1):
-                if hc[i][j] != 0:
-                    # Nếu ràng buộc này chứa ô trống -> chưa được thỏa mãn
-                    if grid[i][j] == 0 or grid[i][j+1] == 0:
-                        if grid[i][j] == 0:   
-                            cells_in_chains.add((i, j))
-                        if grid[i][j+1] == 0: 
-                            cells_in_chains.add((i, j+1))
+                    has_constraint = (
+                        (j > 0          and hc[i][j-1] != 0) or
+                        (j < self.n-1   and hc[i][j]   != 0) or
+                        (i > 0          and vc[i-1][j]  != 0) or
+                        (i < self.n-1   and vc[i][j]    != 0)
+                    )
 
-        # Quét các chuỗi ràng buộc dọc
-        for i in range(n - 1):
-            for j in range(n):
-                if vc[i][j] != 0:
-                    # Nếu ràng buộc này chứa ô trống -> chưa được thỏa mãn
-                    if grid[i][j] == 0 or grid[i+1][j] == 0:
-                        if grid[i][j] == 0:   
-                            cells_in_chains.add((i, j))
-                        if grid[i+1][j] == 0: 
-                            cells_in_chains.add((i+1, j))
+                    if has_constraint:
+                        constrained_unassigned += 1
 
-        constrained_unassigned = len(cells_in_chains)
-
-        # Trả về giá trị trung bình <= unassigned (Bảo toàn Admissible)
-        return (unassigned + constrained_unassigned) // 2
+        return unassigned + (constrained_unassigned // 2)
